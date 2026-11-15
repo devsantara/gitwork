@@ -338,6 +338,90 @@ export function addProject(text: string, project: Project): string {
   );
 }
 
+/**
+ * The Manifest's text without the Project `name`. Only its entry goes, with
+ * the comments on the lines just above it and inside it: everything else,
+ * comments and formatting included, stays exactly as it was. Removing the
+ * last Project leaves `projects: {}`. `text` must be a valid Manifest that
+ * lists `name`.
+ */
+export function removeProject(text: string, name: string): string {
+  const lineCounter = new LineCounter();
+  const doc = parseDocument(text, { lineCounter, uniqueKeys: false });
+  const projects = doc.get('projects', true);
+  if (!isMap(projects)) {
+    throw new Error("the Manifest's 'projects' is not a map");
+  }
+  const index = projects.items.findIndex(
+    (pair) => asWritten(asNode(pair.key, doc)) === name,
+  );
+  if (index === -1) throw new Error(`the Manifest doesn't list '${name}'`);
+  const keyOf = (i: number) => asNode(projects.items[i]!.key, doc)!;
+  const endOf = (i: number) =>
+    (asNode(projects.items[i]!.value, doc) ?? keyOf(i)).range![1];
+
+  if (projects.flow) {
+    // From this entry to the next one, or from the previous one to this.
+    const [start, end] =
+      index + 1 < projects.items.length
+        ? [keyOf(index).range![0], keyOf(index + 1).range![0]]
+        : index > 0
+          ? [endOf(index - 1), endOf(index)]
+          : [projects.range![0] + 1, projects.range![1] - 1];
+    return text.slice(0, start) + text.slice(end);
+  }
+
+  const lines = text.split('\n');
+  const keyLine = lineCounter.linePos(keyOf(index).range![0]).line - 1;
+  const indent = indentOf(lines[keyLine]!);
+
+  // The entry runs on while lines are blank or indented deeper than its key.
+  let next = keyLine + 1;
+  while (
+    next < lines.length &&
+    (blank(lines[next]!) || indentOf(lines[next]!) > indent)
+  )
+    next++;
+  let end = next;
+  while (blank(lines[end - 1]!)) end--;
+  // Comments just above the key, at its indentation, are about this Project.
+  let start = keyLine;
+  while (
+    start > 0 &&
+    lines[start - 1]!.trimStart().startsWith('#') &&
+    indentOf(lines[start - 1]!) === indent
+  )
+    start--;
+
+  if (index + 1 < projects.items.length) {
+    // The blank lines after it go too, so the next Project takes its place.
+    end = next;
+  } else if (index > 0) {
+    // The last Project: the blank lines before it go instead.
+    while (blank(lines[start - 1]!)) start--;
+  }
+  const kept = [...lines.slice(0, start), ...lines.slice(end)].join('\n');
+  if (projects.items.length > 1) return kept;
+
+  // It was the only Project: `projects:` becomes `projects: {}`.
+  const pair = isMap(doc.contents)
+    ? doc.contents.items.find(
+        (item) => asWritten(asNode(item.key, doc)) === 'projects',
+      )
+    : undefined;
+  const colon = text.indexOf(':', asNode(pair?.key, doc)!.range![1]);
+  return `${kept.slice(0, colon + 1)} {}${kept.slice(colon + 1)}`;
+}
+
+/** How many spaces or tabs `line` starts with. */
+function indentOf(line: string): number {
+  return line.length - line.trimStart().length;
+}
+
+function blank(line: string): boolean {
+  return line.trim() === '';
+}
+
 /** One Project's entry as an inline map entry, like `web: {url: w}`. */
 function renderFlowEntry(project: Project): string {
   const fields = stringify(entryFields(project), {

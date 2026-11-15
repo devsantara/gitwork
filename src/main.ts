@@ -6,6 +6,7 @@ import { add } from '#/commands/add.js';
 import { check } from '#/commands/check.js';
 import { exec } from '#/commands/exec.js';
 import { init } from '#/commands/init.js';
+import { remove } from '#/commands/remove.js';
 import { status } from '#/commands/status.js';
 import { sync } from '#/commands/sync.js';
 import { errorCode, UserError } from '#/errors.js';
@@ -26,6 +27,7 @@ Commands:
   add <url> [<name>]
                  Clone a Project, then list it in gitwork.yaml
   add <name>     List an Unlisted Project, with its origin as the url
+  remove <name>  Take a Project out of gitwork.yaml, leaving its folder
 
 Selection [sel]:
   <name>...      Pick these Projects
@@ -158,6 +160,13 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
     unlisted.splice(0, unlisted.length, ...after.unlisted);
     return code;
   }
+  if (command === 'remove') {
+    const code = remove(workspace, rest);
+    // Its folder, if it has one, is Unlisted now.
+    const after = await scanProjectsFolder(loadWorkspace(workspace.dir));
+    unlisted.splice(0, unlisted.length, ...after.unlisted);
+    return code;
+  }
   const selection = select(
     workspace.manifest,
     { names: rest, tags },
@@ -183,7 +192,15 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
   throw new Error(`command '${command}' is listed but not implemented`);
 }
 
-const COMMANDS = new Set(['init', 'check', 'sync', 'status', 'exec', 'add']);
+const COMMANDS = new Set([
+  'init',
+  'check',
+  'sync',
+  'status',
+  'exec',
+  'add',
+  'remove',
+]);
 const JSON_COMMANDS = new Set(['check', 'sync', 'status']);
 const SELECTION_COMMANDS = new Set(['sync', 'status', 'exec']);
 

@@ -1,4 +1,4 @@
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { errorMessage, UserError } from '#/errors.js';
@@ -8,13 +8,14 @@ import {
   isValidName,
   MANIFEST_FILE,
   NAME_RULE,
-  parseManifest,
   type Project,
 } from '#/manifest.js';
 import { cloneProject, originUrl } from '#/projects.js';
 import {
+  checkEdit,
   checkProjectsFolder,
   PROJECTS_FOLDER,
+  readManifestText,
   type Workspace,
 } from '#/workspace.js';
 
@@ -200,22 +201,10 @@ async function checkAdoptable(
 
 /** The Manifest's text with `project` added, checked to still be valid. */
 function withProject(workspace: Workspace, project: Project): string {
-  const text = addProject(readManifestText(workspace), project);
-  const result = parseManifest(text);
-  if (!result.ok) {
-    throw new UserError(
-      `can't add '${project.name}': ${MANIFEST_FILE} would be invalid`,
-      result.errors.map(
-        (error) => `${MANIFEST_FILE}:${error.line}: ${error.message}`,
-      ),
-    );
-  }
-  return text;
-}
-
-/** The Manifest's text as it is on disk, comments and all. */
-function readManifestText(workspace: Workspace): string {
-  return readFileSync(join(workspace.dir, MANIFEST_FILE), 'utf8');
+  return checkEdit(
+    addProject(readManifestText(workspace), project),
+    `can't add '${project.name}'`,
+  );
 }
 
 /** Writes the Manifest; if that fails, says that `path` was left Unlisted. */

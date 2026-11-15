@@ -73,6 +73,28 @@ export function checkProjectsFolder(dir: string): void {
   }
 }
 
+/** The Manifest's text as it is on disk, comments and all. */
+export function readManifestText(workspace: Workspace): string {
+  return readFileSync(join(workspace.dir, MANIFEST_FILE), 'utf8');
+}
+
+/**
+ * `text`, an edited Manifest, once it is checked to still be valid. Otherwise
+ * fails with `failure`, e.g. "can't add 'api'", and every error.
+ */
+export function checkEdit(text: string, failure: string): string {
+  const result = parseManifest(text);
+  if (!result.ok) {
+    throw new UserError(
+      `${failure}: ${MANIFEST_FILE} would be invalid`,
+      result.errors.map(
+        (error) => `${MANIFEST_FILE}:${error.line}: ${error.message}`,
+      ),
+    );
+  }
+  return text;
+}
+
 /** The folder in a Workspace that holds its Projects. */
 export const PROJECTS_FOLDER = 'projects';
 

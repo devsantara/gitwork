@@ -293,6 +293,20 @@ gitwork add <name> [--tag <tag>]... [--description <text>]
 - Only the new entry is written: the Manifest's existing comments and formatting stay as they are, and the result always passes `gitwork check`.
 - `add` never commits. Review and commit the change to `gitwork.yaml` yourself.
 
+### `gitwork remove`
+
+Takes a Project out of the Manifest:
+
+```console
+$ gitwork remove api
+Removed api from gitwork.yaml; projects/api is left as it is, now Unlisted (gitwork prune api deletes it)
+```
+
+- `remove` never deletes anything on disk. The Project's folder stays as it is and becomes **Unlisted**, so no unpushed branch, stash or local file is lost. To delete it, run `gitwork prune <name>`, which checks first.
+- Only the Project's entry is removed, with the comments just above and inside it. The rest of the Manifest's comments and formatting stay as they are. Removing the last Project leaves `projects: {}`.
+- A name the Manifest doesn't list exits 1 and changes nothing.
+- `remove` never commits. Review and commit the change to `gitwork.yaml` yourself. When a teammate removes a Project, everyone else's copy becomes Unlisted the next time they pull the Workspace, and each of them runs `gitwork prune` themselves.
+
 ### Unlisted Projects
 
 You can clone your own repositories into `projects/` too. A git repository there that the Manifest doesn't list is **Unlisted**. gitwork never acts on it, except when you list it with `gitwork add <name>`, and every command except `init` ends with one warning on stderr naming them:
