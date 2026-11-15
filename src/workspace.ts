@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
-import { UserError } from '#/errors.js';
+import { errorMessage, UserError } from '#/errors.js';
 import {
   MANIFEST_FILE,
   parseManifest,
@@ -39,7 +39,7 @@ export function readManifest(dir: string): ParseResult {
     text = readFileSync(path, 'utf8');
   } catch (error) {
     throw new UserError(
-      `cannot read ${displayPath(path)}: ${error instanceof Error ? error.message : String(error)}`,
+      `cannot read ${displayPath(path)}: ${errorMessage(error)}`,
     );
   }
   return parseManifest(text);

@@ -1,7 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { errorCode, UserError } from '#/errors.js';
+import { errorCode, errorMessage, UserError } from '#/errors.js';
 import { MANIFEST_FILE as MANIFEST } from '#/manifest.js';
 const PROJECTS_ENTRY = '/projects/';
 
@@ -23,9 +23,7 @@ export function init(dir: string): number {
   } catch (error) {
     // Undo the Manifest so that running init again can finish the job.
     rmSync(manifest);
-    throw new UserError(
-      `could not update .gitignore: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new UserError(`could not update .gitignore: ${errorMessage(error)}`);
   }
 
   console.log(`Created ${MANIFEST}`);

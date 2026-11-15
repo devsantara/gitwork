@@ -19,3 +19,8 @@ export function errorCode(error: unknown): string | undefined {
     error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
   return typeof code === 'string' ? code : undefined;
 }
+
+/** The message of `error`, whatever was thrown. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
