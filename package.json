@@ -10,8 +10,20 @@
   "files": [
     "dist"
   ],
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.20.0",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.22.3",
+      "onFail": "download"
+    }
+  },
   "engines": {
-    "node": ">=22"
+    "node": ">=24.22.3"
   },
   "os": [
     "darwin",
@@ -25,11 +37,11 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "prepack": "npm run build"
+    "prepack": "pnpm run build"
   },
   "devDependencies": {
-    "@types/node": "^22.20.5",
-    "typescript": "^7.0.2",
-    "vitest": "^5.1.0"
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
   }
 }

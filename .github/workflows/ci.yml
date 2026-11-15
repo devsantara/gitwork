@@ -7,20 +7,20 @@ on:
 
 jobs:
   test:
-    name: Node ${{ matrix.node }} on ${{ matrix.os }}
+    name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        # Every maintained Node LTS line (ADR-0001). Update as lines are added or retired.
-        node: [22, 24, 26]
     steps:
       - uses: actions/checkout@v4
+      # Only bootstraps pnpm: devEngines in package.json makes pnpm download
+      # and use the pinned pnpm and Node versions.
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+          node-version: 24
+      - run: npm install --global pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm test

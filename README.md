@@ -14,7 +14,7 @@
 
 gitwork runs on macOS and Linux. It needs:
 
-- **Node.js 22 or newer** (every maintained LTS line)
+- **Node.js 24.22.3 or newer**
 - **git 2.34 or newer**, already installed. gitwork runs your own `git`, so your SSH keys, credential helpers and git config all apply.
 
 ```sh

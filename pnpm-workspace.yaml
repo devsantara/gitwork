@@ -1,0 +1,27 @@
+# Installation
+nodeLinker: 'isolated'
+autoInstallPeers: true
+strictPeerDependencies: false
+engineStrict: true
+savePrefix: '' # pin exact versions
+verifyDepsBeforeRun: error # fail `pnpm run` if node_modules is out of date
+
+# Security
+minimumReleaseAge: 10080 # In minutes (7 days). Only install versions at least this old, and fail if none qualify
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+minimumReleaseAgeExclude: []
+minimumReleaseAgeExcludePrune: true
+# Fail if a version is published with weaker trust than earlier ones (possible takeover)
+trustPolicy: no-downgrade
+trustPolicyExclude: []
+trustPolicyExcludePrune: true
+blockExoticSubdeps: true # transitive deps must come from the registry, not git/tarballs
+# Never run dependency lifecycle scripts (preinstall/install/postinstall)
+allowBuilds: {} # no package is approved to run build scripts
+dangerouslyAllowAllBuilds: false
+strictDepBuilds: true # fail on dependency build scripts that aren't approved
+
+# Updates
+update:
+  githubActions: true
