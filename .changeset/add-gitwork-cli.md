@@ -1,5 +1,5 @@
 ---
-"@devsantara/gitwork": minor
+'@devsantara/gitwork': minor
 ---
 
 Add the `gitwork` CLI for managing a Workspace of Projects declared in a `gitwork.yaml` Manifest.
