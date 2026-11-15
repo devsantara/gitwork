@@ -147,9 +147,79 @@ admin       failed: ERROR: Repository not found. Could not read from remote repo
 }
 ```
 
+### `gitwork status`
+
+Shows one row per Project: its name, its checked-out branch and its states.
+
+```console
+$ gitwork status
+storefront  main         up to date
+api         main         behind 3, dirty
+admin       spike/login  no upstream
+docs                     missing
+my-tool     main         unlisted, ahead 1
+unlisted: my-tool (gitwork prune deletes them; gitwork add <name> lists one)
+```
+
+- `status` works offline: it reports what git already knows from the last fetch. `--fetch` first fetches every remote of each Project and drops remote branches that no longer exist.
+- In a terminal, the branch is highlighted when it isn't the remote's default branch.
+- `status` never changes a Project. `--fetch` only updates the remote branches of listed Projects; Unlisted ones are never fetched.
+- It works on up to 8 Projects at a time and prints the rows in Manifest order.
+- With no Selection, Unlisted Projects follow as `unlisted` rows.
+- A folder in `projects/` that isn't a git repository is reported on stderr and left alone. If a listed Project's folder isn't one, that Project `failed`.
+- `status` exits 0 unless a Project failed, for example because its fetch failed.
+
+Each row shows the states that apply:
+
+| State                                                                         | Meaning                                                               |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `missing`                                                                     | Listed in the Manifest, with no folder in `projects/` yet.            |
+| `unlisted`                                                                    | In `projects/` but not in the Manifest.                               |
+| `up to date`                                                                  | The checked-out branch matches its upstream.                          |
+| `behind N`                                                                    | The upstream has N commits the branch doesn't.                        |
+| `ahead N`                                                                     | The branch has N commits the upstream doesn't.                        |
+| `diverged`                                                                    | Both: the branch and its upstream each have commits the other lacks.  |
+| `no upstream`                                                                 | The branch has never been pushed, or has no upstream set.             |
+| `gone`                                                                        | The branch's upstream was deleted from the remote.                    |
+| `detached`                                                                    | No branch is checked out (detached HEAD).                             |
+| `dirty`                                                                       | `git status` isn't clean. Untracked files count; ignored files don't. |
+| `merging`, `rebasing`, `cherry-picking`, `reverting`, `bisecting`, `applying` | git is stopped in the middle of that operation.                       |
+| `url mismatch`                                                                | `origin` isn't the Manifest's `url`.                                  |
+
+`--json` prints the rows instead. `branch` is `null` when HEAD is detached or the Project isn't cloned, `defaultBranch` is the remote's default branch when it's known, and a failed Project has an `error`:
+
+```json
+{
+  "projects": [
+    {
+      "name": "api",
+      "branch": "main",
+      "defaultBranch": "main",
+      "states": ["behind 3", "dirty"]
+    },
+    {
+      "name": "docs",
+      "branch": null,
+      "defaultBranch": null,
+      "states": ["missing"]
+    }
+  ]
+}
+```
+
+### Unlisted Projects
+
+You can clone your own repositories into `projects/` too. A git repository there that the Manifest doesn't list is **Unlisted**. gitwork never acts on it, and every command except `init` ends with one warning on stderr naming them:
+
+```text
+unlisted: my-tool, old-api (gitwork prune deletes them; gitwork add <name> lists one)
+```
+
+An Unlisted Project can't be selected. Naming one exits 1 and says how to list it.
+
 ### Selection
 
-Commands that act on Projects, such as `sync`, take a **Selection**: Project names and any number of `--tag <tag>` options. Every Project that matches any of them is selected:
+Commands that act on Projects, such as `sync` and `status`, take a **Selection**: Project names and any number of `--tag <tag>` options. Every Project that matches any of them is selected:
 
 ```sh
 gitwork sync                           # every Project in the Manifest

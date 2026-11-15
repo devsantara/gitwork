@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -11,48 +10,7 @@ import { join } from 'node:path';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { gitwork, tempDir } from './helpers.js';
-
-const git = (cwd: string, ...args: string[]) =>
-  execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
-
-/** A bare repository with one commit on `branch`, standing in for a remote. */
-function remote(branch = 'main'): string {
-  const work = tempDir();
-  git(work, 'init', '-q', '-b', branch);
-  writeFileSync(join(work, 'README.md'), `# ${branch}\n`);
-  git(work, 'add', '.');
-  git(
-    work,
-    '-c',
-    'user.name=Test',
-    '-c',
-    'user.email=test@example.com',
-    'commit',
-    '-q',
-    '-m',
-    'first',
-  );
-  const bare = tempDir();
-  git(bare, 'clone', '-q', '--bare', work, '.');
-  return bare;
-}
-
-interface Listed {
-  url: string;
-  tags?: string[];
-}
-
-function workspace(projects: Record<string, Listed>): string {
-  const dir = tempDir();
-  const lines = ['version: 1', 'projects:'];
-  for (const [name, { url, tags }] of Object.entries(projects)) {
-    lines.push(`  ${name}:`, `    url: ${url}`);
-    if (tags) lines.push(`    tags: [${tags.join(', ')}]`);
-  }
-  writeFileSync(join(dir, 'gitwork.yaml'), `${lines.join('\n')}\n`);
-  return dir;
-}
+import { git, gitwork, remote, tempDir, workspace } from './helpers.js';
 
 const cloned = (dir: string, name: string) =>
   existsSync(join(dir, 'projects', name, '.git'));

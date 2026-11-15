@@ -10,14 +10,23 @@ export interface SelectionArgs {
 /**
  * The Selection: every Project named, plus every Project carrying a named Tag,
  * in Manifest order. With nothing named, every listed Project. An unknown name,
- * or a Tag no Project carries, fails before any work starts.
+ * or a Tag no Project carries, fails before any work starts; naming one of the
+ * `unlisted` Projects says how to list it.
  */
-export function select(manifest: Manifest, args: SelectionArgs): Project[] {
+export function select(
+  manifest: Manifest,
+  args: SelectionArgs,
+  unlisted: readonly string[] = [],
+): Project[] {
   const { projects } = manifest;
   const problems = [
     ...unique(args.names)
       .filter((name) => !projects.some((p) => p.name === name))
-      .map((name) => `no Project named '${name}' in ${MANIFEST_FILE}`),
+      .map((name) =>
+        unlisted.includes(name)
+          ? `'${name}' is unlisted; run 'gitwork add ${name}' to list it.`
+          : `no Project named '${name}' in ${MANIFEST_FILE}`,
+      ),
     ...unique(args.tags)
       .filter((tag) => !projects.some((p) => p.tags.includes(tag)))
       .map((tag) => `no Project has the Tag '${tag}'`),

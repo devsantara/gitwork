@@ -1,9 +1,9 @@
-import { realpathSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { limitConcurrency } from '#/concurrency.js';
 import { errorMessage } from '#/errors.js';
-import { git, type GitResult } from '#/git.js';
+import { git, gitError, isRepositoryRoot } from '#/git.js';
 import type { Project } from '#/manifest.js';
 import {
   checkProjectsFolder,
@@ -93,36 +93,6 @@ async function syncProject(
       error: errorMessage(error),
     };
   }
-}
-
-/**
- * Whether the directory `folder` is the top of its own git repository. A plain
- * folder inside a Workspace that is itself a git repository would otherwise
- * pass as one.
- */
-async function isRepositoryRoot(folder: string): Promise<boolean> {
-  const result = await git(['rev-parse', '--show-toplevel'], { cwd: folder });
-  return (
-    result.code === 0 &&
-    realpathSync(result.stdout.trim()) === realpathSync(folder)
-  );
-}
-
-/**
- * What git said went wrong: everything up to its first `fatal:` or `error:`
- * line, so that the cause ssh or the server gives just before it (such as
- * "Permission denied (publickey).") is kept, on one line.
- */
-function gitError(result: GitResult): string {
-  const lines = result.stderr
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('Cloning into '));
-  const fatal = lines.findIndex((line) => /^(fatal|error): /.test(line));
-  const said = fatal === -1 ? lines : lines.slice(0, fatal + 1);
-  return said.length > 0
-    ? said.map((line) => line.replace(/^(fatal|error): /, '')).join(' ')
-    : `git exited with code ${result.code}`;
 }
 
 function formatLine(result: ProjectResult, width: number): string {
