@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call: # run by the Release workflow before publishing
 
 permissions:
   contents: read
