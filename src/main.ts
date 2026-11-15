@@ -17,7 +17,7 @@ const USAGE = `Usage: gitwork [-C <dir>] <command> [<name>...] [--tag <tag>]...
 Commands:
   init           Create gitwork.yaml here and ignore the projects/ folder
   check          Validate gitwork.yaml and report every error
-  sync [sel]     Clone Missing Projects
+  sync [sel]     Clone Missing Projects and fast-forward cloned ones
   status [sel]   Show the branch and states of each Project
 
 Selection [sel]:

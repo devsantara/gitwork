@@ -10,7 +10,17 @@ import { join } from 'node:path';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { git, gitwork, remote, tempDir, workspace } from './helpers.js';
+import {
+  author,
+  clonedApi,
+  commit,
+  git,
+  gitwork,
+  pushFromElsewhere,
+  remote,
+  tempDir,
+  workspace,
+} from './helpers.js';
 
 const cloned = (dir: string, name: string) =>
   existsSync(join(dir, 'projects', name, '.git'));
@@ -213,10 +223,11 @@ esac
     expect(result.code).toBe(1);
     expect(JSON.parse(result.stdout)).toEqual({
       projects: [
-        { name: 'api', outcome: 'cloned' },
+        { name: 'api', outcome: 'cloned', states: [] },
         {
           name: 'broken',
           outcome: 'failed',
+          states: [],
           error: `repository '${missing}' does not exist`,
         },
       ],
@@ -239,6 +250,277 @@ esac
         .join('\n'),
     );
     expect(git(dir, 'remote')).toBe('');
+  });
+});
+
+const syncOf = (dir: string, ...args: string[]) =>
+  gitwork(['sync', ...args], { cwd: dir });
+
+const head = (project: string, ref = 'HEAD') => git(project, 'rev-parse', ref);
+
+describe('gitwork sync: updating cloned Projects', () => {
+  test('fast-forwards a clean Project that is behind', () => {
+    const { dir, url, project } = clonedApi();
+    pushFromElsewhere(url);
+    pushFromElsewhere(url);
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('api  updated\n\n1 updated\n');
+    expect(head(project)).toBe(head(project, 'origin/main'));
+    expect(existsSync(join(project, 'elsewhere.txt'))).toBe(true);
+    expect(git(project, 'rev-list', '--merges', '--count', 'HEAD')).toBe('0');
+  });
+
+  test('fetches every remote, not only origin', () => {
+    const { dir, project } = clonedApi();
+    const other = remote();
+    git(project, 'remote', 'add', 'fork', other);
+    pushFromElsewhere(other);
+
+    syncOf(dir);
+
+    expect(head(project, 'fork/main')).toBe(head(other, 'main'));
+  });
+
+  test('reports an up-to-date Project as unchanged', () => {
+    const { dir } = clonedApi();
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('api  unchanged\n\n1 unchanged\n');
+  });
+
+  test('leaves a Project that is only ahead unchanged', () => {
+    const { dir, project } = clonedApi();
+    commit(project);
+
+    expect(syncOf(dir).stdout).toBe('api  unchanged: ahead 1\n\n1 unchanged\n');
+  });
+
+  test('leaves a branch that was never pushed unchanged', () => {
+    const { dir, project } = clonedApi();
+    git(project, 'switch', '-q', '-c', 'spike');
+
+    expect(syncOf(dir).stdout).toBe(
+      'api  unchanged: no upstream\n\n1 unchanged\n',
+    );
+  });
+
+  test('drops deleted remote branches, leaving a gone branch unchanged', () => {
+    const { dir, url, project } = clonedApi();
+    git(project, 'switch', '-q', '-c', 'feature');
+    git(project, 'push', '-q', '-u', 'origin', 'feature');
+    git(url, 'branch', '-D', 'feature');
+
+    const result = syncOf(dir);
+
+    expect(result.stdout).toBe('api  unchanged: gone\n\n1 unchanged\n');
+    expect(git(project, 'branch', '-r')).not.toContain('origin/feature');
+  });
+
+  test('skips a Dirty Project that is behind, without changing its exit code', () => {
+    const { dir, url, project } = clonedApi();
+    pushFromElsewhere(url);
+    writeFileSync(join(project, 'notes.txt'), 'mine\n');
+    const before = head(project);
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('api  skipped: behind 1, dirty\n\n1 skipped\n');
+    expect(head(project)).toBe(before);
+    expect(readFileSync(join(project, 'notes.txt'), 'utf8')).toBe('mine\n');
+  });
+
+  test('counts untracked files as Dirty even when git config hides them', () => {
+    const { dir, url, project } = clonedApi();
+    git(project, 'config', 'status.showUntrackedFiles', 'no');
+    pushFromElsewhere(url);
+    writeFileSync(join(project, 'notes.txt'), 'mine\n');
+
+    expect(syncOf(dir).stdout).toBe(
+      'api  skipped: behind 1, dirty\n\n1 skipped\n',
+    );
+  });
+
+  test('a Dirty Project that is not behind is unchanged', () => {
+    const { dir, project } = clonedApi();
+    writeFileSync(join(project, 'notes.txt'), 'mine\n');
+
+    expect(syncOf(dir).stdout).toBe('api  unchanged: dirty\n\n1 unchanged\n');
+  });
+
+  test('skips a diverged Project, never merging or rebasing', () => {
+    const { dir, url, project } = clonedApi();
+    commit(project);
+    pushFromElsewhere(url);
+    const before = head(project);
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('api  skipped: diverged\n\n1 skipped\n');
+    expect(head(project)).toBe(before);
+  });
+
+  test('skips a detached HEAD', () => {
+    const { dir, url, project } = clonedApi();
+    git(project, 'switch', '-q', '--detach');
+    pushFromElsewhere(url);
+    const before = head(project);
+
+    expect(syncOf(dir).stdout).toBe('api  skipped: detached\n\n1 skipped\n');
+    expect(head(project)).toBe(before);
+  });
+
+  test.each([
+    ['merge', 'skipped: ahead 1, dirty, merging'],
+    ['rebase', 'skipped: dirty, rebasing'],
+  ])('skips a %s in progress', (command, line) => {
+    const { dir, project } = clonedApi();
+    // Two branches that change the same line, so combining them stops.
+    git(project, 'switch', '-q', '-c', 'other');
+    writeFileSync(join(project, 'README.md'), 'other\n');
+    git(project, ...author, 'commit', '-q', '-am', 'other');
+    git(project, 'switch', '-q', 'main');
+    writeFileSync(join(project, 'README.md'), 'main\n');
+    git(project, ...author, 'commit', '-q', '-am', 'main');
+    expect(() => git(project, ...author, command, '-q', 'other')).toThrow(
+      'Command failed',
+    );
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(`api  ${line}\n\n1 skipped\n`);
+  });
+
+  test('fast-forwards the default branch when another branch is checked out, even if Dirty', () => {
+    const { dir, url, project } = clonedApi();
+    git(project, 'switch', '-q', '-c', 'spike');
+    writeFileSync(join(project, 'notes.txt'), 'mine\n');
+    pushFromElsewhere(url);
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(
+      'api  unchanged: no upstream, dirty, main updated\n\n1 unchanged\n',
+    );
+    expect(head(project, 'main')).toBe(head(project, 'origin/main'));
+    expect(git(project, 'branch', '--show-current')).toBe('spike');
+    expect(existsSync(join(project, 'elsewhere.txt'))).toBe(false);
+    expect(readFileSync(join(project, 'notes.txt'), 'utf8')).toBe('mine\n');
+  });
+
+  test('leaves the default branch alone when it has commits of its own', () => {
+    const { dir, url, project } = clonedApi();
+    commit(project);
+    git(project, 'switch', '-q', '-c', 'spike');
+    pushFromElsewhere(url);
+    const before = head(project, 'main');
+
+    expect(syncOf(dir).stdout).toBe(
+      'api  unchanged: no upstream\n\n1 unchanged\n',
+    );
+    expect(head(project, 'main')).toBe(before);
+  });
+
+  test('leaves the default branch alone when it is checked out in another worktree', () => {
+    const { dir, url, project } = clonedApi();
+    git(project, 'switch', '-q', '-c', 'spike');
+    git(project, 'worktree', 'add', '-q', join(tempDir(), 'main'), 'main');
+    pushFromElsewhere(url);
+    const before = head(project, 'main');
+
+    expect(syncOf(dir).stdout).toBe(
+      'api  unchanged: no upstream\n\n1 unchanged\n',
+    );
+    expect(head(project, 'main')).toBe(before);
+  });
+
+  test('leaves the default branch alone while another worktree has a detached HEAD', () => {
+    const { dir, url, project } = clonedApi();
+    git(project, 'switch', '-q', '-c', 'spike');
+    git(project, 'worktree', 'add', '-q', '--detach', join(tempDir(), 'wt'));
+    pushFromElsewhere(url);
+    const before = head(project, 'main');
+
+    syncOf(dir);
+
+    expect(head(project, 'main')).toBe(before);
+  });
+
+  test('skips the default-branch step when the default branch cannot be determined', () => {
+    const { dir, url, project } = clonedApi();
+    git(project, 'switch', '-q', '-c', 'spike');
+    git(project, 'remote', 'set-head', 'origin', '--delete');
+    // Newer git would otherwise record it again on the next fetch.
+    git(project, 'config', 'remote.origin.followRemoteHEAD', 'never');
+    pushFromElsewhere(url);
+    const before = head(project, 'main');
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('api  unchanged: no upstream\n\n1 unchanged\n');
+    expect(head(project, 'main')).toBe(before);
+  });
+
+  test('warns about a url mismatch but still follows the configured upstream', () => {
+    const { dir, project } = clonedApi();
+    const moved = remote();
+    git(project, 'remote', 'set-url', 'origin', moved);
+    git(project, 'fetch', '-q', 'origin');
+    git(project, 'reset', '-q', '--hard', 'origin/main');
+    pushFromElsewhere(moved);
+
+    const result = syncOf(dir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('api  updated: url mismatch\n\n1 updated\n');
+    expect(result.stderr).toBe(
+      "api: origin is not the url in gitwork.yaml; sync still follows the branch's upstream\n",
+    );
+    expect(head(project)).toBe(head(moved, 'main'));
+    expect(git(project, 'remote', 'get-url', 'origin')).toBe(moved);
+  });
+
+  test("fails a Project whose fetch fails, with git's error, and carries on", () => {
+    const missing = join(tempDir(), 'nowhere.git');
+    const dir = workspace({ api: { url: remote() }, web: { url: remote() } });
+    syncOf(dir);
+    git(join(dir, 'projects', 'api'), 'remote', 'set-url', 'origin', missing);
+
+    const result = syncOf(dir, '--json');
+
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.stdout).projects).toEqual([
+      expect.objectContaining({ name: 'api', outcome: 'failed' }),
+      { name: 'web', outcome: 'unchanged', states: [] },
+    ]);
+  });
+
+  test("--json includes each Project's outcome and states", () => {
+    const urls = { api: remote(), web: remote() };
+    const dir = workspace({ api: { url: urls.api }, web: { url: urls.web } });
+    syncOf(dir);
+    pushFromElsewhere(urls.api);
+    pushFromElsewhere(urls.web);
+    writeFileSync(join(dir, 'projects', 'web', 'notes.txt'), 'mine\n');
+
+    const result = syncOf(dir, '--json');
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      projects: [
+        { name: 'api', outcome: 'updated', states: [] },
+        { name: 'web', outcome: 'skipped', states: ['behind 1', 'dirty'] },
+      ],
+    });
   });
 });
 

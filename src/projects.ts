@@ -12,6 +12,14 @@ export interface ProjectState {
   defaultBranch: string | null;
   /** The state words that apply, such as `behind 2` or `dirty`. */
   states: string[];
+  /** Commits the checked-out branch has that its upstream lacks; null with no upstream to count against. */
+  ahead: number | null;
+  /** Commits the upstream has that the checked-out branch lacks; null with no upstream to count against. */
+  behind: number | null;
+  /** Whether the Project is Dirty: untracked files count, ignored ones don't. */
+  dirty: boolean;
+  /** The operation git has paused in the middle of, such as `merging`, if any. */
+  operation: string | null;
 }
 
 /**
@@ -29,6 +37,8 @@ export async function inspectProject(
     'status',
     '--porcelain=v2',
     '--branch',
+    // Dirty counts untracked files, whatever status.showUntrackedFiles says.
+    '--untracked-files=normal',
   ]);
   const gitDir = (
     await gitOutput(folder, ['rev-parse', '--absolute-git-dir'])
@@ -70,7 +80,15 @@ export async function inspectProject(
   if (url !== undefined && (await originUrl(folder)) !== url)
     states.push('url mismatch');
 
-  return { branch: detached ? null : head, defaultBranch, states };
+  return {
+    branch: detached ? null : head,
+    defaultBranch,
+    states,
+    ahead: ahead ?? null,
+    behind: behind ?? null,
+    dirty,
+    operation: operation ?? null,
+  };
 }
 
 /**

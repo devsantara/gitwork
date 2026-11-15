@@ -90,11 +90,15 @@ async function projectRow(
       });
       if (result.code !== 0) return { ...row, error: gitError(result) };
     }
-    const state = await inspectProject(folder, listed?.url);
+    const { branch, defaultBranch, states } = await inspectProject(
+      folder,
+      listed?.url,
+    );
     return {
       name,
-      ...state,
-      states: listed ? state.states : ['unlisted', ...state.states],
+      branch,
+      defaultBranch,
+      states: listed ? states : ['unlisted', ...states],
     };
   } catch (error) {
     return { ...row, error: errorMessage(error) };

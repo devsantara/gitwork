@@ -113,34 +113,65 @@ jobs:
 
 ### `gitwork sync`
 
-Clones every **Missing** Project, that is every Project in the Manifest with no folder in `projects/` yet:
+Clones every **Missing** Project, that is every Project in the Manifest with no folder in `projects/` yet, and safely updates the ones already cloned:
 
 ```console
 $ gitwork sync
 storefront  cloned
-api         unchanged
-admin       failed: ERROR: Repository not found. Could not read from remote repository.
+api         updated
+web         skipped: behind 2, dirty
+admin       unchanged: no upstream, main updated
+docs        failed: ERROR: Repository not found. Could not read from remote repository.
 
-1 cloned, 1 unchanged, 1 failed
+1 cloned, 1 updated, 1 unchanged, 1 skipped, 1 failed
 ```
 
-- Each Project is cloned with a plain `git clone <url> projects/<name>`: the remote's default branch, with the Manifest's `url` as `origin` (even if your git config names remotes differently), and no shallow clone or submodules.
-- Projects that are already cloned are reported as `unchanged`. `sync` does not update them yet.
+Each line shows the Project's outcome, then the states that explain it, as they are once `sync` is done.
+
+- Each Missing Project is cloned with a plain `git clone <url> projects/<name>`: the remote's default branch, with the Manifest's `url` as `origin` (even if your git config names remotes differently), and no shallow clone or submodules.
 - If `projects/<name>` exists but is not a git repository, the Project `failed` and its folder is left alone.
 - `sync` works on up to 8 Projects at a time and prints one line per Project, in Manifest order, then a summary.
-- One Project failing never stops the others. `sync` exits 0 when nothing failed and 1 otherwise.
+- One Project failing never stops the others. **Skipped** Projects don't count as failures: `sync` exits 0 unless a Project `failed`.
 - `sync` never touches the Workspace's own repository.
 
-`--json` prints the result of each Project instead:
+#### How cloned Projects are updated
+
+`sync` first fetches every remote of the Project and drops remote branches that no longer exist (`git fetch --all --prune`). Then it updates the checked-out branch only when that is a plain fast-forward and nothing uncommitted is in the way:
+
+| The checked-out branch is                                                  | Outcome                       |
+| -------------------------------------------------------------------------- | ----------------------------- |
+| Behind its upstream, and the Project isn't **Dirty**                       | `updated` (fast-forward only) |
+| Up to date                                                                 | `unchanged`                   |
+| Ahead only                                                                 | `unchanged: ahead N`          |
+| Never pushed                                                               | `unchanged: no upstream`      |
+| Tracking an upstream branch that was deleted                               | `unchanged: gone`             |
+| Behind, and the Project is Dirty                                           | `skipped: behind N, dirty`    |
+| Ahead and behind                                                           | `skipped: diverged`           |
+| Not a branch (detached HEAD), or a merge, rebase or similar is in progress | `skipped`, with that state    |
+
+When another branch is checked out, `sync` also fast-forwards the default branch (the one `origin/HEAD` points at) if it is simply behind its upstream, and reports `main updated` (with the branch's name). This only moves the branch, never any files, so it happens even when the Project is Dirty. It is left alone if it has commits of its own, if the checked-out HEAD is detached or a merge, rebase or similar is in progress, if another worktree has it checked out or has a detached HEAD (it may be rebasing it), or if the default branch can't be determined.
+
+If `origin` isn't the Manifest's `url`, the Project gets the `url mismatch` state and a warning on stderr. `sync` still follows the branch's configured upstream, and never changes `origin`.
+
+`sync` never creates merge commits, rebases, resets, stashes or force-updates anything. Anything it won't do safely is left for you.
+
+`--json` prints the outcome and states of each Project instead:
 
 ```json
 {
   "projects": [
-    { "name": "storefront", "outcome": "cloned" },
-    { "name": "api", "outcome": "unchanged" },
+    { "name": "storefront", "outcome": "cloned", "states": [] },
+    { "name": "api", "outcome": "updated", "states": [] },
+    { "name": "web", "outcome": "skipped", "states": ["behind 2", "dirty"] },
     {
       "name": "admin",
+      "outcome": "unchanged",
+      "states": ["no upstream", "main updated"]
+    },
+    {
+      "name": "docs",
       "outcome": "failed",
+      "states": [],
       "error": "ERROR: Repository not found. Could not read from remote repository."
     }
   ]

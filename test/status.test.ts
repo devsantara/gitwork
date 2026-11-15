@@ -3,32 +3,17 @@ import { join } from 'node:path';
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { git, gitwork, remote, tempDir, workspace } from './helpers.js';
-
-const author = ['-c', 'user.name=Test', '-c', 'user.email=test@example.com'];
-
-/** Commits a change to `file` in the repository at `cwd`. */
-function commit(cwd: string, file = 'change.txt'): void {
-  writeFileSync(join(cwd, file), `${Math.random()}\n`);
-  git(cwd, 'add', '.');
-  git(cwd, ...author, 'commit', '-q', '-m', `change ${file}`);
-}
-
-/** Pushes a new commit to the remote's `branch` from a separate clone. */
-function pushFromElsewhere(url: string, branch = 'main'): void {
-  const other = tempDir();
-  git(other, 'clone', '-q', '-b', branch, url, '.');
-  commit(other, 'elsewhere.txt');
-  git(other, 'push', '-q', 'origin', branch);
-}
-
-/** A Workspace with the one Project `api`, cloned. */
-function clonedApi(): { dir: string; url: string; project: string } {
-  const url = remote();
-  const dir = workspace({ api: { url } });
-  gitwork(['sync'], { cwd: dir });
-  return { dir, url, project: join(dir, 'projects', 'api') };
-}
+import {
+  author,
+  clonedApi,
+  commit,
+  git,
+  gitwork,
+  pushFromElsewhere,
+  remote,
+  tempDir,
+  workspace,
+} from './helpers.js';
 
 /** A Workspace listing `api`, with the Unlisted Projects `old-api` and `my-tool` cloned beside it. */
 function withUnlisted(): string {
