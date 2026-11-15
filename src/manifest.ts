@@ -6,6 +6,7 @@ import {
   isSeq,
   LineCounter,
   parseDocument,
+  stringify,
   type Document,
   type Node,
   type YAMLMap,
@@ -38,8 +39,14 @@ export type ParseResult =
 
 /** Project names and Tags: lowercase, and never `..`, `.hidden` or anything else starting with punctuation. */
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
-const NAME_RULE =
+/** What a valid Project name or Tag looks like, said to the user. */
+export const NAME_RULE =
   "use lowercase letters, digits, '.', '_' and '-', starting with a letter or digit";
+
+/** Whether `name` is a valid Project name or Tag. */
+export function isValidName(name: string): boolean {
+  return NAME_PATTERN.test(name);
+}
 
 const TOP_LEVEL_KEYS = new Set(['version', 'projects']);
 const PROJECT_KEYS = new Set(['url', 'description', 'tags']);
@@ -280,4 +287,101 @@ function asNode(value: unknown, doc: Document): Node | null {
 /** True only for `version: 1` as written, not `1.0`, `0x1` or `"1"`. */
 function isVersionOne(node: Node | null): boolean {
   return isScalar(node) && node.value === 1 && node.source === '1';
+}
+
+/**
+ * The Manifest's text with `project` appended to its Projects. Only the new
+ * entry is written: everything already there, comments and formatting
+ * included, stays exactly as it was. The new entry follows the indentation of
+ * the Projects already listed. `text` must be a valid Manifest that doesn't
+ * list `project` yet.
+ */
+export function addProject(text: string, project: Project): string {
+  const lineCounter = new LineCounter();
+  const doc = parseDocument(text, { lineCounter, uniqueKeys: false });
+  const projects = doc.get('projects', true);
+  if (!isMap(projects)) {
+    throw new Error("the Manifest's 'projects' is not a map");
+  }
+  const column = (node: Node) => lineCounter.linePos(node.range![0]).col - 1;
+
+  const last = projects.items.at(-1);
+  if (projects.flow && last !== undefined) {
+    // Written inline: the entry goes just before the closing brace.
+    const brace = text.lastIndexOf('}', projects.range![1] - 1);
+    const comma = text.slice(0, brace).trimEnd().endsWith(',') ? '' : ',';
+    return `${text.slice(0, brace)}${comma} ${renderFlowEntry(project)}${text.slice(brace)}`;
+  }
+
+  if (last === undefined) {
+    // `projects: {}`, as `init` writes it: the map becomes a block.
+    const [start, end] = projects.range!;
+    const before = text.slice(0, start).replace(/[ \t]+$/, '');
+    const rest = text.slice(end);
+    const edited = before + rest;
+    return insertAfterLine(edited, before.length, renderEntry(project, 2, 2));
+  }
+
+  const firstKey = asNode(projects.items[0]!.key, doc)!;
+  const firstValue = asNode(projects.items[0]!.value, doc);
+  const indent = column(firstKey);
+  const firstField =
+    isMap(firstValue) && !firstValue.flow
+      ? asNode(firstValue.items[0]?.key, doc)
+      : null;
+  const step = firstField ? column(firstField) - indent : 2;
+  const lastValue = asNode(last.value, doc) ?? asNode(last.key, doc)!;
+  return insertAfterLine(
+    text,
+    lastValue.range![1] - 1,
+    renderEntry(project, indent, step > 0 ? step : 2),
+  );
+}
+
+/** One Project's entry as an inline map entry, like `web: {url: w}`. */
+function renderFlowEntry(project: Project): string {
+  const fields = stringify(entryFields(project), {
+    collectionStyle: 'flow',
+    flowCollectionPadding: false,
+    lineWidth: 0,
+  }).trimEnd();
+  return `${oneLine(project.name)}: ${fields}`;
+}
+
+/** A listed Project's fields, as written in the Manifest. */
+function entryFields(project: Project): Record<string, unknown> {
+  return {
+    url: project.url,
+    ...(project.description !== undefined && {
+      description: project.description,
+    }),
+    ...(project.tags.length > 0 && { tags: project.tags }),
+  };
+}
+
+/** One Project's entry as block YAML lines, each ending in a newline. */
+function renderEntry(project: Project, indent: number, step: number): string {
+  const pad = ' '.repeat(indent);
+  const fieldPad = ' '.repeat(indent + step);
+  const lines = [
+    `${pad}${oneLine(project.name)}:`,
+    `${fieldPad}url: ${oneLine(project.url)}`,
+  ];
+  if (project.description !== undefined)
+    lines.push(`${fieldPad}description: ${oneLine(project.description)}`);
+  if (project.tags.length > 0)
+    lines.push(`${fieldPad}tags: [${project.tags.map(oneLine).join(', ')}]`);
+  return lines.map((line) => `${line}\n`).join('');
+}
+
+/** `text` with `insert` placed after the line holding the character at `offset`. */
+function insertAfterLine(text: string, offset: number, insert: string): string {
+  const newline = text.indexOf('\n', Math.max(offset, 0));
+  if (newline === -1) return `${text}\n${insert}`;
+  return text.slice(0, newline + 1) + insert + text.slice(newline + 1);
+}
+
+/** A string as a YAML scalar on one line, quoted only when it must be: never a block scalar. */
+function oneLine(value: string): string {
+  return stringify(value, { lineWidth: 0, blockQuote: false }).trimEnd();
 }

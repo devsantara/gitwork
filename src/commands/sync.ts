@@ -6,7 +6,7 @@ import { errorMessage } from '#/errors.js';
 import { git, gitError, isRepositoryRoot } from '#/git.js';
 import { MANIFEST_FILE, type Project } from '#/manifest.js';
 import { outcomeLine, outcomeSummary } from '#/outcomes.js';
-import { inspectProject, type ProjectState } from '#/projects.js';
+import { cloneProject, inspectProject, type ProjectState } from '#/projects.js';
 import {
   checkProjectsFolder,
   PROJECTS_FOLDER,
@@ -94,19 +94,7 @@ async function syncProject(
   try {
     const stats = statSync(folder, { throwIfNoEntry: false });
     if (stats === undefined) {
-      // A plain clone, except that the remote is always `origin`, whatever
-      // the user's clone.defaultRemoteName says.
-      const result = await git(
-        [
-          'clone',
-          '--origin',
-          'origin',
-          '--',
-          project.url,
-          join(PROJECTS_FOLDER, name),
-        ],
-        { cwd: workspaceDir },
-      );
+      const result = await cloneProject(workspaceDir, name, project.url);
       if (result.code !== 0) return failed(gitError(result));
       return { name, outcome: 'cloned', states: [] };
     }

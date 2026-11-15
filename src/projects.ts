@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { git, gitError, isRepositoryRoot } from '#/git.js';
+import { git, gitError, isRepositoryRoot, type GitResult } from '#/git.js';
 import { PROJECTS_FOLDER, type Workspace } from '#/workspace.js';
 
 /** How a cloned Project is now, as git sees it. */
@@ -163,9 +163,27 @@ async function remoteDefaultBranch(folder: string): Promise<string | null> {
   return result.stdout.trim().replace(/^origin\//, '');
 }
 
-async function originUrl(folder: string): Promise<string | undefined> {
+/** The URL of the `origin` remote of the repository in `folder`, if it has one. */
+export async function originUrl(folder: string): Promise<string | undefined> {
   const result = await git(['config', '--get', 'remote.origin.url'], {
     cwd: folder,
   });
-  return result.code === 0 ? result.stdout.trim() : undefined;
+  const url = result.stdout.trim();
+  return result.code === 0 && url !== '' ? url : undefined;
+}
+
+/**
+ * Clones `url` into `projects/<name>` of the Workspace in `workspaceDir` with
+ * a plain `git clone`, except that the remote is always `origin`, whatever the
+ * user's clone.defaultRemoteName says.
+ */
+export function cloneProject(
+  workspaceDir: string,
+  name: string,
+  url: string,
+): Promise<GitResult> {
+  return git(
+    ['clone', '--origin', 'origin', '--', url, join(PROJECTS_FOLDER, name)],
+    { cwd: workspaceDir },
+  );
 }

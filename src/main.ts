@@ -2,6 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
+import { add } from '#/commands/add.js';
 import { check } from '#/commands/check.js';
 import { exec } from '#/commands/exec.js';
 import { init } from '#/commands/init.js';
@@ -22,6 +23,9 @@ Commands:
   status [sel]   Show the branch and states of each Project
   exec [sel] -- <command>
                  Run <command> through the shell in each cloned Project
+  add <url> [<name>]
+                 Clone a Project, then list it in gitwork.yaml
+  add <name>     List an Unlisted Project, with its origin as the url
 
 Selection [sel]:
   <name>...      Pick these Projects
@@ -34,6 +38,9 @@ Options:
       --fetch    Fetch every remote of each Project first (status)
       --parallel
                  Run in up to 8 Projects at once, naming each line (exec)
+      --description <text>
+                 The Project's description (add)
+      --no-clone List the Project without cloning it (add)
   -h, --help     Show this help
   -v, --version  Show the gitwork version
 `;
@@ -81,7 +88,11 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
     throw new UserError(`'${command}' does not support --json`);
   }
   const tags = values.tag ?? [];
-  if (tags.length > 0 && !SELECTION_COMMANDS.has(command)) {
+  if (
+    tags.length > 0 &&
+    !SELECTION_COMMANDS.has(command) &&
+    command !== 'add'
+  ) {
     throw new UserError(`'${command}' does not support --tag`);
   }
   if (values.fetch && command !== 'status') {
@@ -89,6 +100,12 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
   }
   if (values.parallel && command !== 'exec') {
     throw new UserError(`'${command}' does not support --parallel`);
+  }
+  if (values.description !== undefined && command !== 'add') {
+    throw new UserError(`'${command}' does not support --description`);
+  }
+  if (values['no-clone'] && command !== 'add') {
+    throw new UserError(`'${command}' does not support --no-clone`);
   }
   if (command !== 'exec' && commandArgs !== undefined) {
     throw new UserError(`'${command}' takes nothing after '--'`);
@@ -125,6 +142,22 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
   const workspace = loadWorkspace(process.cwd());
   const scan = await scanProjectsFolder(workspace);
   unlisted.push(...scan.unlisted);
+  if (command === 'add') {
+    const code = await add(
+      workspace,
+      rest,
+      {
+        tags,
+        description: values.description,
+        clone: !values['no-clone'],
+      },
+      scan.unlisted,
+    );
+    // The Project just listed is Unlisted no more.
+    const after = await scanProjectsFolder(loadWorkspace(workspace.dir));
+    unlisted.splice(0, unlisted.length, ...after.unlisted);
+    return code;
+  }
   const selection = select(
     workspace.manifest,
     { names: rest, tags },
@@ -150,7 +183,7 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
   throw new Error(`command '${command}' is listed but not implemented`);
 }
 
-const COMMANDS = new Set(['init', 'check', 'sync', 'status', 'exec']);
+const COMMANDS = new Set(['init', 'check', 'sync', 'status', 'exec', 'add']);
 const JSON_COMMANDS = new Set(['check', 'sync', 'status']);
 const SELECTION_COMMANDS = new Set(['sync', 'status', 'exec']);
 
@@ -166,10 +199,12 @@ function parseCommandLine(args: string[]) {
       allowPositionals: true,
       tokens: true,
       options: {
+        description: { type: 'string' },
         directory: { type: 'string', short: 'C' },
         fetch: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         json: { type: 'boolean' },
+        'no-clone': { type: 'boolean' },
         parallel: { type: 'boolean' },
         tag: { type: 'string', multiple: true },
         version: { type: 'boolean', short: 'v' },

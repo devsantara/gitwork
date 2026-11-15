@@ -271,9 +271,31 @@ docs        skipped: missing
 - The words after `--` are joined with spaces, like `ssh` does, so quote anything the shell should see as one argument, or pass the whole command as one quoted string.
 - The command gets no stdin and git's prompts are off (`GIT_TERMINAL_PROMPT=0`), so it can never wait for input.
 
+### `gitwork add`
+
+Puts a Project in the Manifest:
+
+```console
+$ gitwork add git@github.com:acme/api.git --tag backend --description "Public API"
+Cloned git@github.com:acme/api.git into projects/api
+Added api to gitwork.yaml
+```
+
+```sh
+gitwork add <url> [<name>] [--tag <tag>]... [--description <text>] [--no-clone]
+gitwork add <name> [--tag <tag>]... [--description <text>]
+```
+
+- The name defaults to the URL's last path segment without `.git`, as `git clone` names its folder. If that isn't a valid Project name, or a Project already has it, `add` exits 1 and asks you to give one: `gitwork add <url> <name>`.
+- `add` clones first, with a plain `git clone` like `sync` does, and writes the Manifest entry only if the clone worked, so a mistyped URL never reaches the Manifest. `--no-clone` writes the entry without cloning; `gitwork sync` clones it later.
+- If `projects/<name>` already exists and is a git repository whose `origin` is the URL, `add` adopts it as it is, without cloning. If it exists but isn't a git repository with that `origin`, `add` exits 1 and changes nothing.
+- `gitwork add <name>`, where the argument has no `/` or `:`, lists the **Unlisted** Project `projects/<name>`, taking the URL from its `origin`. It exits 1 if there is no such Unlisted Project or it has no `origin`.
+- Only the new entry is written: the Manifest's existing comments and formatting stay as they are, and the result always passes `gitwork check`.
+- `add` never commits. Review and commit the change to `gitwork.yaml` yourself.
+
 ### Unlisted Projects
 
-You can clone your own repositories into `projects/` too. A git repository there that the Manifest doesn't list is **Unlisted**. gitwork never acts on it, and every command except `init` ends with one warning on stderr naming them:
+You can clone your own repositories into `projects/` too. A git repository there that the Manifest doesn't list is **Unlisted**. gitwork never acts on it, except when you list it with `gitwork add <name>`, and every command except `init` ends with one warning on stderr naming them:
 
 ```text
 unlisted: my-tool, old-api (gitwork prune deletes them; gitwork add <name> lists one)

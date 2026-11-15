@@ -35,7 +35,7 @@ A Project listed in the Manifest with no folder in `projects/` yet. This is norm
 _Avoid_: not cloned, absent
 
 **Unlisted**:
-A Project in `projects/` that the Manifest does not list. gitwork warns about it but never acts on it, except to prune it.
+A Project in `projects/` that the Manifest does not list. gitwork warns about it but never acts on it, except to prune it or to list it with `gitwork add`.
 _Avoid_: orphan, stray, extraneous
 
 **Dirty**:
