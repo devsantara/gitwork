@@ -49,7 +49,11 @@ echo "git version ${version}"
 }
 
 export const git = (cwd: string, ...args: string[]) =>
-  execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
 
 /** A bare repository with one commit on `branch`, standing in for a remote. */
 export function remote(branch = 'main'): string {
