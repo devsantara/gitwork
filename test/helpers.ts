@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-const CLI = resolve(import.meta.dirname, '../dist/cli.mjs');
+export const CLI = resolve(import.meta.dirname, '../dist/cli.mjs');
 
 export interface RunResult {
   code: number | null;
