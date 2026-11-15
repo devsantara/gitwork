@@ -25,12 +25,15 @@
     "build": "vp pack",
     "test": "vp test run",
     "prepack": "pnpm run build",
-    "check": "vp check"
+    "check": "vp check",
+    "changeset": "changeset"
   },
   "dependencies": {
     "yaml": "2.9.1"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "1.0.1",
+    "@changesets/cli": "3.0.3",
     "@types/node": "24.19.2",
     "typescript": "7.0.2",
     "vite-plus": "catalog:"
