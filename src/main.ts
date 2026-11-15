@@ -1,9 +1,10 @@
-import { readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { parseArgs } from "node:util";
-import { init } from "./commands/init.js";
-import { errorCode, UserError } from "./errors.js";
-import { checkGitVersion } from "./git.js";
+import { readFileSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parseArgs } from 'node:util';
+
+import { init } from '#/commands/init.js';
+import { errorCode, UserError } from '#/errors.js';
+import { checkGitVersion } from '#/git.js';
 
 const USAGE = `Usage: gitwork [-C <dir>] <command>
 
@@ -51,11 +52,13 @@ async function run(args: string[]): Promise<number> {
   await checkGitVersion();
 
   switch (command) {
-    case "init":
+    case 'init':
       expectNoArguments(command, rest);
       return init(process.cwd());
     default:
-      throw new UserError(`unknown command '${command}'. See 'gitwork --help'.`);
+      throw new UserError(
+        `unknown command '${command}'. See 'gitwork --help'.`,
+      );
   }
 }
 
@@ -65,9 +68,9 @@ function parseCommandLine(args: string[]) {
       args,
       allowPositionals: true,
       options: {
-        directory: { type: "string", short: "C" },
-        help: { type: "boolean", short: "h" },
-        version: { type: "boolean", short: "v" },
+        directory: { type: 'string', short: 'C' },
+        help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean', short: 'v' },
       },
     });
   } catch (error) {
@@ -85,14 +88,20 @@ function changeDirectory(dir: string): void {
 }
 
 function expectNoArguments(command: string, rest: string[]): void {
-  if (rest.length > 0) throw new UserError(`'${command}' takes no arguments, got '${rest.join(" ")}'`);
+  if (rest.length > 0) {
+    throw new UserError(
+      `'${command}' takes no arguments, got '${rest.join(' ')}'`,
+    );
+  }
 }
 
 function packageVersion(): string {
-  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const pkg = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+  );
   return pkg.version;
 }
 
 function isParseArgsError(error: unknown): error is Error {
-  return errorCode(error)?.startsWith("ERR_PARSE_ARGS_") ?? false;
+  return errorCode(error)?.startsWith('ERR_PARSE_ARGS_') ?? false;
 }

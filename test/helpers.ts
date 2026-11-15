@@ -1,9 +1,9 @@
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
-const CLI = resolve(import.meta.dirname, "../dist/cli.js");
+const CLI = resolve(import.meta.dirname, '../dist/cli.mjs');
 
 export interface RunResult {
   code: number | null;
@@ -21,8 +21,8 @@ export function gitwork(args: string[], { cwd, env }: RunOptions): RunResult {
   const result = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     env: env ?? process.env,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 15_000,
   });
   if (result.error) throw result.error;
@@ -30,7 +30,7 @@ export function gitwork(args: string[], { cwd, env }: RunOptions): RunResult {
 }
 
 export function tempDir(): string {
-  return realpathSync(mkdtempSync(join(tmpdir(), "gitwork-test-")));
+  return realpathSync(mkdtempSync(join(tmpdir(), 'gitwork-test-')));
 }
 
 /**
@@ -44,6 +44,6 @@ if [ -t 0 ]; then tty=tty; else tty=notty; fi
 echo "$* GIT_TERMINAL_PROMPT=$GIT_TERMINAL_PROMPT $tty" >> "${dir}/calls.log"
 echo "git version ${version}"
 `;
-  writeFileSync(join(dir, "git"), script, { mode: 0o755 });
+  writeFileSync(join(dir, 'git'), script, { mode: 0o755 });
   return dir;
 }
