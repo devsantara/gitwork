@@ -40,9 +40,10 @@ export default defineConfig({
         ['style'],
       ],
     },
-    ignorePatterns: ['pnpm-lock.yaml'],
+    ignorePatterns: ['pnpm-lock.yaml', 'CHANGELOG.md', '.changeset/**'],
   },
   lint: {
+    ignorePatterns: ['CHANGELOG.md', '.changeset/**'],
     options: {
       typeAware: true,
       typeCheck: true,
