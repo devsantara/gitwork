@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { check } from '#/commands/check.js';
+import { exec } from '#/commands/exec.js';
 import { init } from '#/commands/init.js';
 import { status } from '#/commands/status.js';
 import { sync } from '#/commands/sync.js';
@@ -19,6 +20,8 @@ Commands:
   check          Validate gitwork.yaml and report every error
   sync [sel]     Clone Missing Projects and fast-forward cloned ones
   status [sel]   Show the branch and states of each Project
+  exec [sel] -- <command>
+                 Run <command> through the shell in each cloned Project
 
 Selection [sel]:
   <name>...      Pick these Projects
@@ -29,6 +32,8 @@ Options:
   -C <dir>       Run as if gitwork was started in <dir>
       --json     Print the result as JSON (check, sync, status)
       --fetch    Fetch every remote of each Project first (status)
+      --parallel
+                 Run in up to 8 Projects at once, naming each line (exec)
   -h, --help     Show this help
   -v, --version  Show the gitwork version
 `;
@@ -53,7 +58,7 @@ export async function main(args: string[]): Promise<number> {
 }
 
 async function run(args: string[], unlisted: string[]): Promise<number> {
-  const { values, positionals } = parseCommandLine(args);
+  const { values, positionals, commandArgs } = parseCommandLine(args);
 
   if (values.help) {
     process.stdout.write(USAGE);
@@ -81,6 +86,19 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
   }
   if (values.fetch && command !== 'status') {
     throw new UserError(`'${command}' does not support --fetch`);
+  }
+  if (values.parallel && command !== 'exec') {
+    throw new UserError(`'${command}' does not support --parallel`);
+  }
+  if (command !== 'exec' && commandArgs !== undefined) {
+    throw new UserError(`'${command}' takes nothing after '--'`);
+  }
+  // Joined like ssh joins its arguments: the shell parses the result.
+  const shellCommand = commandArgs?.join(' ') ?? '';
+  if (command === 'exec' && shellCommand.trim() === '') {
+    throw new UserError(
+      "'exec' needs a command after '--', as in 'gitwork exec -- npm test'",
+    );
   }
   if (values.directory !== undefined) changeDirectory(values.directory);
 
@@ -124,24 +142,35 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
         unlisted: rest.length === 0 && tags.length === 0 ? scan.unlisted : [],
         notRepositories: scan.notRepositories,
       });
+    case 'exec':
+      return exec(workspace, selection, shellCommand, {
+        parallel: values.parallel ?? false,
+      });
   }
   throw new Error(`command '${command}' is listed but not implemented`);
 }
 
-const COMMANDS = new Set(['init', 'check', 'sync', 'status']);
+const COMMANDS = new Set(['init', 'check', 'sync', 'status', 'exec']);
 const JSON_COMMANDS = new Set(['check', 'sync', 'status']);
-const SELECTION_COMMANDS = new Set(['sync', 'status']);
+const SELECTION_COMMANDS = new Set(['sync', 'status', 'exec']);
 
+/**
+ * The options and positionals before `--`, and the arguments after it, or
+ * undefined when there is no `--`.
+ */
 function parseCommandLine(args: string[]) {
+  let parsed;
   try {
-    return parseArgs({
+    parsed = parseArgs({
       args,
       allowPositionals: true,
+      tokens: true,
       options: {
         directory: { type: 'string', short: 'C' },
         fetch: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         json: { type: 'boolean' },
+        parallel: { type: 'boolean' },
         tag: { type: 'string', multiple: true },
         version: { type: 'boolean', short: 'v' },
       },
@@ -150,6 +179,21 @@ function parseCommandLine(args: string[]) {
     if (isParseArgsError(error)) throw new UserError(error.message);
     throw error;
   }
+  const terminator = parsed.tokens.find(
+    (token) => token.kind === 'option-terminator',
+  );
+  if (terminator === undefined) {
+    return { ...parsed, commandArgs: undefined };
+  }
+  return {
+    ...parsed,
+    positionals: parsed.tokens.flatMap((token) =>
+      token.kind === 'positional' && token.index < terminator.index
+        ? [token.value]
+        : [],
+    ),
+    commandArgs: args.slice(terminator.index + 1),
+  };
 }
 
 function changeDirectory(dir: string): void {

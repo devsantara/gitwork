@@ -238,6 +238,39 @@ Each row shows the states that apply:
 }
 ```
 
+### `gitwork exec`
+
+Runs one command in every cloned Project of the Selection. Everything after `--` is the command; it runs through the shell (`sh -c`) with `projects/<name>` as the working directory:
+
+```console
+$ gitwork exec -- 'npm ci && npm test'
+==> storefront <==
+...
+==> api <==
+...
+
+storefront  ok
+api         failed: exit code 1
+docs        skipped: missing
+
+1 ok, 1 failed, 1 skipped
+```
+
+- By default the command runs in one Project at a time, in Manifest order, with a `==> name <==` heading above each Project's output. The command's output goes straight to your terminal.
+- `--parallel` runs it in up to 8 Projects at once and puts `[name]` in front of every line of output, on stdout and stderr alike:
+
+  ```console
+  $ gitwork exec --parallel --tag backend -- git log -1 --oneline
+  [api] 3f2c1ab Add rate limiting
+  [billing] 9d0e4b2 Bump dependencies
+  ```
+
+- It runs only in cloned Projects. **Missing** Projects are `skipped: missing`. If a listed Project's folder isn't a git repository, that Project `failed` and nothing runs there.
+- One command failing never stops the others. The summary shows each Project's outcome, with the exit code of each one that `failed`.
+- `exec` exits 1 if any command failed, otherwise 0.
+- The words after `--` are joined with spaces, like `ssh` does, so quote anything the shell should see as one argument, or pass the whole command as one quoted string.
+- The command gets no stdin and git's prompts are off (`GIT_TERMINAL_PROMPT=0`), so it can never wait for input.
+
 ### Unlisted Projects
 
 You can clone your own repositories into `projects/` too. A git repository there that the Manifest doesn't list is **Unlisted**. gitwork never acts on it, and every command except `init` ends with one warning on stderr naming them:
@@ -250,7 +283,7 @@ An Unlisted Project can't be selected. Naming one exits 1 and says how to list i
 
 ### Selection
 
-Commands that act on Projects, such as `sync` and `status`, take a **Selection**: Project names and any number of `--tag <tag>` options. Every Project that matches any of them is selected:
+Commands that act on Projects, such as `sync`, `status` and `exec`, take a **Selection**: Project names and any number of `--tag <tag>` options. Every Project that matches any of them is selected:
 
 ```sh
 gitwork sync                           # every Project in the Manifest

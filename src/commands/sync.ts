@@ -5,6 +5,7 @@ import { limitConcurrency } from '#/concurrency.js';
 import { errorMessage } from '#/errors.js';
 import { git, gitError, isRepositoryRoot } from '#/git.js';
 import { MANIFEST_FILE, type Project } from '#/manifest.js';
+import { outcomeLine, outcomeSummary } from '#/outcomes.js';
 import { inspectProject, type ProjectState } from '#/projects.js';
 import {
   checkProjectsFolder,
@@ -56,7 +57,11 @@ export async function sync(
   for (const promise of pending) {
     const result = await promise;
     results.push(result);
-    if (!options.json) console.log(formatLine(result, width));
+    if (!options.json) {
+      const details =
+        result.outcome === 'failed' ? [result.error] : result.states;
+      console.log(outcomeLine(result.name, width, result.outcome, details));
+    }
     if (result.states.includes('url mismatch')) {
       console.error(
         `${result.name}: origin is not the url in ${MANIFEST_FILE}; sync still follows the branch's upstream`,
@@ -69,7 +74,7 @@ export async function sync(
   } else if (results.length === 0) {
     console.log('no Projects to sync');
   } else {
-    console.log(`\n${summary(results)}`);
+    console.log(`\n${outcomeSummary(OUTCOMES, results)}`);
   }
   return results.some((r) => r.outcome === 'failed') ? 1 : 0;
 }
@@ -237,22 +242,4 @@ async function fastForwardDefaultBranch(
     { cwd: folder },
   );
   return updated.code === 0;
-}
-
-function formatLine(result: ProjectResult, width: number): string {
-  const details = result.outcome === 'failed' ? [result.error] : result.states;
-  const outcome =
-    details.length > 0
-      ? `${result.outcome}: ${details.join(', ')}`
-      : result.outcome;
-  return `${result.name.padEnd(width)}  ${outcome}`;
-}
-
-/** e.g. "2 cloned, 1 updated, 1 failed". */
-function summary(results: readonly ProjectResult[]): string {
-  const parts = OUTCOMES.flatMap((outcome) => {
-    const count = results.filter((r) => r.outcome === outcome).length;
-    return count > 0 ? [`${count} ${outcome}`] : [];
-  });
-  return parts.join(', ');
 }
