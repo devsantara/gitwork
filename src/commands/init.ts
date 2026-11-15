@@ -2,8 +2,7 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { errorCode, UserError } from '#/errors.js';
-
-const MANIFEST = 'gitwork.yaml';
+import { MANIFEST_FILE as MANIFEST } from '#/manifest.js';
 const PROJECTS_ENTRY = '/projects/';
 
 /** Writes an empty Manifest in `dir` and makes git ignore its `projects/` folder. */

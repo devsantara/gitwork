@@ -47,8 +47,72 @@ gitwork init
 
 If `gitwork.yaml` already exists, `init` changes nothing and exits with code 1.
 
+### The Manifest
+
+`gitwork.yaml` lists every **Project** in the Workspace:
+
+```yaml
+version: 1
+projects:
+  storefront:
+    url: git@github.com:acme/storefront.git
+    description: Customer-facing shop
+    tags: [frontend, web]
+  api:
+    url: git@github.com:acme/api.git
+    tags: [backend]
+```
+
+- `version` must be `1`.
+- `projects` is a map from each Project's name to its settings:
+  - `url` (required): where to clone it from, as you would pass it to `git clone`.
+  - `description` (optional): a string.
+  - `tags` (optional): a list of **Tags**, used to pick out groups of Projects.
+- Project names and Tags use lowercase letters, digits, `.`, `_` and `-`, and start with a letter or digit. Each Project is cloned to `projects/<name>`.
+- Unknown keys, duplicate names, duplicate keys and two Projects with the same `url` are errors.
+
+gitwork looks for `gitwork.yaml` in the current directory and then in each parent directory, so you can run it from anywhere inside the Workspace. Every command except `init` refuses to run while the Manifest is invalid.
+
+### `gitwork check`
+
+Validates the Manifest without touching the network, and reports every error at once with its line number:
+
+```console
+$ gitwork check
+gitwork.yaml:1: 'version' must be 1
+gitwork.yaml:5: unknown key 'branch' in Project 'api'
+gitwork: gitwork.yaml has 2 errors
+```
+
+It exits 0 when the Manifest is valid and 1 otherwise. `--json` prints the result as JSON instead:
+
+```json
+{
+  "manifest": "/home/me/acme-workspace/gitwork.yaml",
+  "valid": false,
+  "errors": [
+    { "line": 1, "message": "'version' must be 1" },
+    { "line": 5, "message": "unknown key 'branch' in Project 'api'" }
+  ]
+}
+```
+
+To catch mistakes before they are merged, run it in the Workspace repository's CI. For example, with GitHub Actions:
+
+```yaml
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npx --yes @devsantara/gitwork check
+```
+
 ### Global options
 
-- `-C <dir>` runs any command as if gitwork had been started in `<dir>`, like `git -C`.
+- `-C <dir>` runs any command as if gitwork had been started in `<dir>`, like `git -C`. The search for `gitwork.yaml` starts there.
 
 gitwork never prompts, so it is safe to use in scripts, CI and agents.
