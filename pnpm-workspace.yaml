@@ -5,6 +5,16 @@ strictPeerDependencies: false
 engineStrict: true
 savePrefix: '' # pin exact versions
 verifyDepsBeforeRun: error # fail `pnpm run` if node_modules is out of date
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.5.0
+  vite-plus: 1.5.0
+overrides:
+  vite@*: 'catalog:'
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: '*'
 
 # Security
 minimumReleaseAge: 10080 # In minutes (7 days). Only install versions at least this old, and fail if none qualify
@@ -25,13 +35,3 @@ strictDepBuilds: true # fail on dependency build scripts that aren't approved
 # Updates
 update:
   githubActions: true
-catalog:
-  vite: npm:@voidzero-dev/vite-plus-core@1.5.0
-  vite-plus: 1.5.0
-overrides:
-  vite@*: 'catalog:'
-peerDependencyRules:
-  allowAny:
-    - vite
-  allowedVersions:
-    vite: '*'
