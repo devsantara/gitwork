@@ -307,9 +307,42 @@ Removed api from gitwork.yaml; projects/api is left as it is, now Unlisted (gitw
 - A name the Manifest doesn't list exits 1 and changes nothing.
 - `remove` never commits. Review and commit the change to `gitwork.yaml` yourself. When a teammate removes a Project, everyone else's copy becomes Unlisted the next time they pull the Workspace, and each of them runs `gitwork prune` themselves.
 
+### `gitwork prune`
+
+Deletes **Unlisted** Projects, but only those holding nothing that could be lost:
+
+```console
+$ gitwork prune
+old-api  deleted
+spike    skipped: 2 unpushed commits on spike/payments, 1 stash
+legacy   skipped: dirty, merging
+
+1 deleted, 2 skipped
+```
+
+```sh
+gitwork prune [<name>...] [--dry-run]
+```
+
+- With names, `prune` works on those Unlisted Projects; with none, on every one.
+- A Project is `deleted` only when all of these hold:
+  - `git status` is clean (untracked files count),
+  - there are no stashes,
+  - every commit on every local branch, and on a detached HEAD, is on a remote branch,
+  - no merge, rebase or other operation is in progress,
+  - it has no linked worktrees (from `git worktree add`), whose work `prune` can't see.
+- Any other Project is `skipped`, with every reason, and `prune` moves on to the next one.
+- `prune` works offline: a commit counts as pushed when a remote branch git already knows about has it. Run `git fetch` in the Project first if you're unsure.
+- It never deletes a listed Project, or a folder in `projects/` that isn't a git repository, because it can't check that folder. Naming either, or a name that isn't in `projects/`, exits 1 and deletes nothing.
+- `--dry-run` reports what would be `deleted` or `skipped`, and deletes nothing.
+- Outcomes are `deleted`, `skipped` and `failed`. `prune` exits 0 unless a Project `failed`.
+
+> [!WARNING]
+> Ignored files never stop `prune`, and they are deleted with the folder. That includes build output such as `node_modules`, but also local files such as `.env`. Copy anything you need first.
+
 ### Unlisted Projects
 
-You can clone your own repositories into `projects/` too. A git repository there that the Manifest doesn't list is **Unlisted**. gitwork never acts on it, except when you list it with `gitwork add <name>`, and every command except `init` ends with one warning on stderr naming them:
+You can clone your own repositories into `projects/` too. A git repository there that the Manifest doesn't list is **Unlisted**. gitwork never acts on it, except when you list it with `gitwork add <name>` or delete it with `gitwork prune`, and every command except `init` ends with one warning on stderr naming them:
 
 ```text
 unlisted: my-tool, old-api (gitwork prune deletes them; gitwork add <name> lists one)

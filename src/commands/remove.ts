@@ -1,13 +1,14 @@
-import { statSync, writeFileSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { errorMessage, UserError } from '#/errors.js';
-import { MANIFEST_FILE, removeProject } from '#/manifest.js';
+import { UserError } from '#/errors.js';
+import { isListed, MANIFEST_FILE, removeProject } from '#/manifest.js';
 import {
-  checkEdit,
+  checkManifestEdit,
   PROJECTS_FOLDER,
   readManifestText,
   type Workspace,
+  writeManifestText,
 } from '#/workspace.js';
 
 /**
@@ -21,21 +22,15 @@ export function remove(workspace: Workspace, args: readonly string[]): number {
       "'remove' takes one Project name, as in 'gitwork remove api'",
     );
   }
-  if (!workspace.manifest.projects.some((p) => p.name === name)) {
+  if (!isListed(workspace.manifest, name)) {
     throw new UserError(`no Project named '${name}' in ${MANIFEST_FILE}`);
   }
 
-  const text = checkEdit(
+  const text = checkManifestEdit(
     removeProject(readManifestText(workspace), name),
     `can't remove '${name}'`,
   );
-  try {
-    writeFileSync(join(workspace.dir, MANIFEST_FILE), text);
-  } catch (error) {
-    throw new UserError(
-      `could not write ${MANIFEST_FILE}: ${errorMessage(error)}`,
-    );
-  }
+  writeManifestText(workspace, text);
 
   const path = join(PROJECTS_FOLDER, name);
   const cloned =

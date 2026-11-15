@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
 import { errorMessage, UserError } from '#/errors.js';
@@ -80,19 +80,30 @@ export function readManifestText(workspace: Workspace): string {
 
 /**
  * `text`, an edited Manifest, once it is checked to still be valid. Otherwise
- * fails with `failure`, e.g. "can't add 'api'", and every error.
+ * fails, saying `cannot` (e.g. "can't add 'api'") and every error.
  */
-export function checkEdit(text: string, failure: string): string {
+export function checkManifestEdit(text: string, cannot: string): string {
   const result = parseManifest(text);
   if (!result.ok) {
     throw new UserError(
-      `${failure}: ${MANIFEST_FILE} would be invalid`,
+      `${cannot}: ${MANIFEST_FILE} would be invalid`,
       result.errors.map(
         (error) => `${MANIFEST_FILE}:${error.line}: ${error.message}`,
       ),
     );
   }
   return text;
+}
+
+/** Writes the Manifest's text, failing with a UserError that says why not. */
+export function writeManifestText(workspace: Workspace, text: string): void {
+  try {
+    writeFileSync(join(workspace.dir, MANIFEST_FILE), text);
+  } catch (error) {
+    throw new UserError(
+      `could not write ${MANIFEST_FILE}: ${errorMessage(error)}`,
+    );
+  }
 }
 
 /** The folder in a Workspace that holds its Projects. */

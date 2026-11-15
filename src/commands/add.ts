@@ -1,10 +1,11 @@
-import { statSync, writeFileSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { errorMessage, UserError } from '#/errors.js';
 import { gitError, isRepositoryRoot } from '#/git.js';
 import {
   addProject,
+  isListed,
   isValidName,
   MANIFEST_FILE,
   NAME_RULE,
@@ -12,11 +13,12 @@ import {
 } from '#/manifest.js';
 import { cloneProject, originUrl } from '#/projects.js';
 import {
-  checkEdit,
+  checkManifestEdit,
   checkProjectsFolder,
   PROJECTS_FOLDER,
   readManifestText,
   type Workspace,
+  writeManifestText,
 } from '#/workspace.js';
 
 export interface AddOptions {
@@ -83,8 +85,7 @@ async function addUrl(
         : `invalid Project name '${name}': ${NAME_RULE}`,
     );
   }
-  const { projects } = workspace.manifest;
-  if (projects.some((p) => p.name === name)) {
+  if (isListed(workspace.manifest, name)) {
     throw new UserError(
       `a Project named '${name}' is already in ${MANIFEST_FILE}` +
         (explicitName === undefined ? `; ${giveName}` : ''),
@@ -126,7 +127,7 @@ async function addUnlisted(
   options: AddOptions,
   unlisted: readonly string[],
 ): Promise<number> {
-  if (workspace.manifest.projects.some((p) => p.name === name)) {
+  if (isListed(workspace.manifest, name)) {
     throw new UserError(`'${name}' is already in ${MANIFEST_FILE}`);
   }
   const path = join(PROJECTS_FOLDER, name);
@@ -201,7 +202,7 @@ async function checkAdoptable(
 
 /** The Manifest's text with `project` added, checked to still be valid. */
 function withProject(workspace: Workspace, project: Project): string {
-  return checkEdit(
+  return checkManifestEdit(
     addProject(readManifestText(workspace), project),
     `can't add '${project.name}'`,
   );
@@ -210,13 +211,10 @@ function withProject(workspace: Workspace, project: Project): string {
 /** Writes the Manifest; if that fails, says that `path` was left Unlisted. */
 function writeManifest(workspace: Workspace, text: string, path: string): void {
   try {
-    writeFileSync(join(workspace.dir, MANIFEST_FILE), text);
+    writeManifestText(workspace, text);
   } catch (error) {
-    const left = statSync(join(workspace.dir, path), { throwIfNoEntry: false })
-      ? `; ${path} is left Unlisted`
-      : '';
-    throw new UserError(
-      `could not write ${MANIFEST_FILE}: ${errorMessage(error)}${left}`,
-    );
+    if (!statSync(join(workspace.dir, path), { throwIfNoEntry: false }))
+      throw error;
+    throw new UserError(`${errorMessage(error)}; ${path} is left Unlisted`);
   }
 }

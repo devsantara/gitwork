@@ -134,6 +134,90 @@ export function warnUnlisted(unlisted: readonly string[]): void {
   );
 }
 
+/**
+ * What deleting the cloned Project in `folder` would lose, as reasons such as
+ * `dirty`, `2 unpushed commits on spike/payments` or `1 stash`; empty when
+ * nothing could be lost (ADR-0002). Ignored files never count. Works offline:
+ * a commit counts as pushed when a remote branch git already knows has it.
+ * Throws with git's words when git fails.
+ */
+export async function whatCouldBeLost(folder: string): Promise<string[]> {
+  const reasons: string[] = [];
+  const status = await gitOutput(folder, [
+    '--no-optional-locks',
+    'status',
+    '--porcelain',
+    '--untracked-files=normal',
+  ]);
+  if (status.trim() !== '') reasons.push('dirty');
+  const gitDir = (
+    await gitOutput(folder, ['rev-parse', '--absolute-git-dir'])
+  ).trim();
+  const operation = operationInProgress(gitDir);
+  if (operation !== undefined) reasons.push(operation);
+
+  /** Commits `revision` has that no remote branch has, nor any of `alsoOn`. */
+  const unpushed = async (revision: string, ...alsoOn: string[]) =>
+    Number(
+      await gitOutput(folder, [
+        'rev-list',
+        '--count',
+        revision,
+        '--not',
+        '--remotes',
+        ...alsoOn,
+      ]),
+    );
+  const branches = (
+    await gitOutput(folder, [
+      'for-each-ref',
+      '--format=%(refname:short)',
+      'refs/heads',
+    ])
+  )
+    .split('\n')
+    .filter((branch) => branch !== '');
+  for (const branch of branches) {
+    const count = await unpushed(`refs/heads/${branch}`);
+    if (count > 0) reasons.push(unpushedCommits(count, branch));
+  }
+  // Commits made on a detached HEAD are on no branch at all.
+  const onBranch = await git(['symbolic-ref', '--quiet', 'HEAD'], {
+    cwd: folder,
+  });
+  const hasHead = await git(['rev-parse', '--verify', '--quiet', 'HEAD'], {
+    cwd: folder,
+  });
+  if (onBranch.code !== 0 && hasHead.code === 0) {
+    const count = await unpushed('HEAD', '--branches');
+    if (count > 0) reasons.push(unpushedCommits(count, 'detached HEAD'));
+  }
+
+  // Their own changes, operations and detached HEADs are out of sight here,
+  // and deleting this folder would cut them off from their repository.
+  const worktrees =
+    (await gitOutput(folder, ['worktree', 'list', '--porcelain']))
+      .split('\n\n')
+      .filter((entry) => entry.trim() !== '' && !/^prunable/m.test(entry))
+      .length - 1;
+  if (worktrees > 0)
+    reasons.push(
+      `${worktrees} linked ${worktrees === 1 ? 'worktree' : 'worktrees'}`,
+    );
+
+  const stashes = (await gitOutput(folder, ['stash', 'list']))
+    .split('\n')
+    .filter((line) => line !== '').length;
+  if (stashes > 0)
+    reasons.push(`${stashes} ${stashes === 1 ? 'stash' : 'stashes'}`);
+  return reasons;
+}
+
+/** A reason like `2 unpushed commits on main`. */
+function unpushedCommits(count: number, on: string): string {
+  return `${count} unpushed ${count === 1 ? 'commit' : 'commits'} on ${on}`;
+}
+
 async function gitOutput(folder: string, args: string[]): Promise<string> {
   const result = await git(args, { cwd: folder });
   if (result.code !== 0) throw new Error(gitError(result));

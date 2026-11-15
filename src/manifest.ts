@@ -289,6 +289,11 @@ function isVersionOne(node: Node | null): boolean {
   return isScalar(node) && node.value === 1 && node.source === '1';
 }
 
+/** Whether the Manifest lists a Project named `name`. */
+export function isListed(manifest: Manifest, name: string): boolean {
+  return manifest.projects.some((p) => p.name === name);
+}
+
 /**
  * The Manifest's text with `project` appended to its Projects. Only the new
  * entry is written: everything already there, comments and formatting
@@ -375,20 +380,21 @@ export function removeProject(text: string, name: string): string {
   const keyLine = lineCounter.linePos(keyOf(index).range![0]).line - 1;
   const indent = indentOf(lines[keyLine]!);
 
-  // The entry runs on while lines are blank or indented deeper than its key.
-  let next = keyLine + 1;
-  while (
-    next < lines.length &&
-    (blank(lines[next]!) || indentOf(lines[next]!) > indent)
-  )
-    next++;
-  let end = next;
-  while (blank(lines[end - 1]!)) end--;
+  // The entry ends at its last line indented deeper than its key. Blank lines
+  // and comments at any indentation can sit inside it.
+  let end = keyLine + 1;
+  for (let i = end; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (indentOf(line) > indent && !isBlank(line)) end = i + 1;
+    else if (!isBlank(line) && !isComment(line)) break;
+  }
+  let next = end;
+  while (next < lines.length && isBlank(lines[next]!)) next++;
   // Comments just above the key, at its indentation, are about this Project.
   let start = keyLine;
   while (
     start > 0 &&
-    lines[start - 1]!.trimStart().startsWith('#') &&
+    isComment(lines[start - 1]!) &&
     indentOf(lines[start - 1]!) === indent
   )
     start--;
@@ -398,7 +404,7 @@ export function removeProject(text: string, name: string): string {
     end = next;
   } else if (index > 0) {
     // The last Project: the blank lines before it go instead.
-    while (blank(lines[start - 1]!)) start--;
+    while (isBlank(lines[start - 1]!)) start--;
   }
   const kept = [...lines.slice(0, start), ...lines.slice(end)].join('\n');
   if (projects.items.length > 1) return kept;
@@ -418,8 +424,12 @@ function indentOf(line: string): number {
   return line.length - line.trimStart().length;
 }
 
-function blank(line: string): boolean {
+function isBlank(line: string): boolean {
   return line.trim() === '';
+}
+
+function isComment(line: string): boolean {
+  return line.trimStart().startsWith('#');
 }
 
 /** One Project's entry as an inline map entry, like `web: {url: w}`. */

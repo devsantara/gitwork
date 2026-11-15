@@ -47,6 +47,24 @@ describe('removeProject', () => {
     );
   });
 
+  test('removes an entry with a comment at the start of a line inside it', () => {
+    const text = removeProject(
+      yaml(
+        'version: 1',
+        'projects:',
+        '  api:',
+        '    url: a',
+        '# about the description',
+        '    description: d',
+        '  web:',
+        '    url: w',
+      ),
+      'api',
+    );
+
+    expect(text).toBe(yaml('version: 1', 'projects:', '  web:', '    url: w'));
+  });
+
   test('removes the first Project', () => {
     const text = removeProject(
       yaml(

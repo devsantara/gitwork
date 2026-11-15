@@ -6,6 +6,7 @@ import { add } from '#/commands/add.js';
 import { check } from '#/commands/check.js';
 import { exec } from '#/commands/exec.js';
 import { init } from '#/commands/init.js';
+import { prune } from '#/commands/prune.js';
 import { remove } from '#/commands/remove.js';
 import { status } from '#/commands/status.js';
 import { sync } from '#/commands/sync.js';
@@ -28,6 +29,8 @@ Commands:
                  Clone a Project, then list it in gitwork.yaml
   add <name>     List an Unlisted Project, with its origin as the url
   remove <name>  Take a Project out of gitwork.yaml, leaving its folder
+  prune [<name>...]
+                 Delete Unlisted Projects that hold nothing that could be lost
 
 Selection [sel]:
   <name>...      Pick these Projects
@@ -43,6 +46,7 @@ Options:
       --description <text>
                  The Project's description (add)
       --no-clone List the Project without cloning it (add)
+      --dry-run  Show what would be deleted, deleting nothing (prune)
   -h, --help     Show this help
   -v, --version  Show the gitwork version
 `;
@@ -106,6 +110,9 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
   if (values.description !== undefined && command !== 'add') {
     throw new UserError(`'${command}' does not support --description`);
   }
+  if (values['dry-run'] && command !== 'prune') {
+    throw new UserError(`'${command}' does not support --dry-run`);
+  }
   if (values['no-clone'] && command !== 'add') {
     throw new UserError(`'${command}' does not support --no-clone`);
   }
@@ -156,15 +163,21 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
       scan.unlisted,
     );
     // The Project just listed is Unlisted no more.
-    const after = await scanProjectsFolder(loadWorkspace(workspace.dir));
-    unlisted.splice(0, unlisted.length, ...after.unlisted);
+    await rescanUnlisted(workspace.dir, unlisted);
+    return code;
+  }
+  if (command === 'prune') {
+    const code = await prune(workspace, rest, scan, {
+      dryRun: values['dry-run'] ?? false,
+    });
+    // Only the Projects left behind are still Unlisted.
+    await rescanUnlisted(workspace.dir, unlisted);
     return code;
   }
   if (command === 'remove') {
     const code = remove(workspace, rest);
     // Its folder, if it has one, is Unlisted now.
-    const after = await scanProjectsFolder(loadWorkspace(workspace.dir));
-    unlisted.splice(0, unlisted.length, ...after.unlisted);
+    await rescanUnlisted(workspace.dir, unlisted);
     return code;
   }
   const selection = select(
@@ -200,6 +213,7 @@ const COMMANDS = new Set([
   'exec',
   'add',
   'remove',
+  'prune',
 ]);
 const JSON_COMMANDS = new Set(['check', 'sync', 'status']);
 const SELECTION_COMMANDS = new Set(['sync', 'status', 'exec']);
@@ -218,6 +232,7 @@ function parseCommandLine(args: string[]) {
       options: {
         description: { type: 'string' },
         directory: { type: 'string', short: 'C' },
+        'dry-run': { type: 'boolean' },
         fetch: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         json: { type: 'boolean' },
@@ -246,6 +261,16 @@ function parseCommandLine(args: string[]) {
     ),
     commandArgs: args.slice(terminator.index + 1),
   };
+}
+
+/**
+ * Replaces `unlisted` with what a fresh scan finds, for commands that change
+ * which Projects are Unlisted. The Manifest is read again, as it may have
+ * changed too.
+ */
+async function rescanUnlisted(dir: string, unlisted: string[]): Promise<void> {
+  const after = await scanProjectsFolder(loadWorkspace(dir));
+  unlisted.splice(0, unlisted.length, ...after.unlisted);
 }
 
 function changeDirectory(dir: string): void {
