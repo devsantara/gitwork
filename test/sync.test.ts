@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, test } from 'vite-plus/test';
@@ -189,6 +196,20 @@ esac
     expect(result.stdout).toContain(
       'api  failed: git@x: Permission denied (publickey). Could not read from remote repository.\n',
     );
+  });
+
+  test('refuses to run when projects/ is a symlink, cloning nothing', () => {
+    const dir = workspace({ api: { url: remote() } });
+    const elsewhere = tempDir();
+    symlinkSync(elsewhere, join(dir, 'projects'));
+
+    const result = gitwork(['sync'], { cwd: dir });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe(
+      'gitwork: projects must be a directory, not a symlink\n',
+    );
+    expect(readdirSync(elsewhere)).toEqual([]);
   });
 
   test('works on up to 8 Projects at once', () => {

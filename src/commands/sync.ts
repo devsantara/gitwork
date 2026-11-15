@@ -5,7 +5,11 @@ import { limitConcurrency } from '#/concurrency.js';
 import { errorMessage } from '#/errors.js';
 import { git, type GitResult } from '#/git.js';
 import type { Project } from '#/manifest.js';
-import type { Workspace } from '#/workspace.js';
+import {
+  checkProjectsFolder,
+  PROJECTS_FOLDER,
+  type Workspace,
+} from '#/workspace.js';
 
 /** How many Projects sync works on at once. */
 const CONCURRENCY = 8;
@@ -26,6 +30,7 @@ export async function sync(
   selection: readonly Project[],
   options: { json: boolean },
 ): Promise<number> {
+  checkProjectsFolder(workspace.dir);
   const run = limitConcurrency(CONCURRENCY);
   const pending = selection.map((project) =>
     run(() => syncProject(workspace.dir, project)),
@@ -56,7 +61,7 @@ async function syncProject(
   project: Project,
 ): Promise<ProjectResult> {
   const { name } = project;
-  const folder = join(workspaceDir, 'projects', name);
+  const folder = join(workspaceDir, PROJECTS_FOLDER, name);
   try {
     const stats = statSync(folder, { throwIfNoEntry: false });
     if (stats === undefined) {
@@ -69,7 +74,7 @@ async function syncProject(
           'origin',
           '--',
           project.url,
-          join('projects', name),
+          join(PROJECTS_FOLDER, name),
         ],
         { cwd: workspaceDir },
       );

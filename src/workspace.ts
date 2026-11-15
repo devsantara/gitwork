@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
 import { errorMessage, UserError } from '#/errors.js';
@@ -55,6 +55,26 @@ export function loadWorkspace(start: string): Workspace {
   if (!result.ok) throw invalidManifest(dir, result.errors);
   return { dir, manifest: result.manifest };
 }
+
+/**
+ * Fails unless the Workspace's `projects/` folder is a real directory or
+ * doesn't exist yet. A Workspace repository can commit `projects` as a
+ * symlink (`/projects/` in .gitignore only matches directories), which would
+ * otherwise make gitwork write Projects wherever it points.
+ */
+export function checkProjectsFolder(dir: string): void {
+  const stats = lstatSync(join(dir, PROJECTS_FOLDER), {
+    throwIfNoEntry: false,
+  });
+  if (stats !== undefined && !stats.isDirectory()) {
+    throw new UserError(
+      `${displayPath(join(dir, PROJECTS_FOLDER))} must be a directory, not ${stats.isSymbolicLink() ? 'a symlink' : 'a file'}`,
+    );
+  }
+}
+
+/** The folder in a Workspace that holds its Projects. */
+export const PROJECTS_FOLDER = 'projects';
 
 /** The error every command fails with when the Manifest is invalid. */
 export function invalidManifest(
