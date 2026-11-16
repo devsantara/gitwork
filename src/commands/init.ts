@@ -1,6 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { completionNotInstalled } from '#/commands/completion.js';
 import { errorCode, errorMessage, UserError } from '#/errors.js';
 import { MANIFEST_FILE as MANIFEST } from '#/manifest.js';
 const PROJECTS_ENTRY = '/projects/';
@@ -28,6 +29,9 @@ export function init(dir: string): number {
 
   console.log(`Created ${MANIFEST}`);
   if (added) console.log(`Added ${PROJECTS_ENTRY} to .gitignore`);
+  if (completionNotInstalled()) {
+    console.log("\nTab completion: run 'gitwork completion install'");
+  }
   return 0;
 }
 

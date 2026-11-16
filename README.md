@@ -20,6 +20,7 @@ gitwork runs on macOS and Linux. It needs:
 ```sh
 npm install --global @devsantara/gitwork
 gitwork --version
+gitwork completion install   # tab completion for zsh or bash, optional
 ```
 
 ## Usage
@@ -240,7 +241,13 @@ Each row shows the states that apply:
 
 ### `gitwork exec`
 
-Runs one command in every cloned Project of the Selection. Everything after `--` is the command; it runs through the shell (`sh -c`) with `projects/<name>` as the working directory:
+Runs one command in every cloned Project of the Selection, with `projects/<name>` as the working directory. Everything after `--` is the command, written just as you would type it yourself:
+
+```console
+$ gitwork exec -- git commit -m 'chore: bump dependencies'
+```
+
+When the command is a single quoted word, it runs through the shell (`sh -c`), so you can use pipes, `&&` and variables:
 
 ```console
 $ gitwork exec -- 'npm ci && npm test'
@@ -268,7 +275,8 @@ docs        skipped: missing
 - It runs only in cloned Projects. **Missing** Projects are `skipped: missing`. If a listed Project's folder isn't a git repository, that Project `failed` and nothing runs there.
 - One command failing never stops the others. The summary shows each Project's outcome, with the exit code of each one that `failed`.
 - `exec` exits 1 if any command failed, otherwise 0.
-- The words after `--` are joined with spaces, like `ssh` does, so quote anything the shell should see as one argument, or pass the whole command as one quoted string.
+- Several words after `--` are a program and its arguments, run as they are: your shell has already handled the quoting, and nothing parses them again. A program that can't be found `failed: command not found: <name>`.
+- One word after `--` runs through `sh -c`, once in each Project. Quote it in single quotes so your own shell leaves `$` and `|` for that one.
 - The command gets no stdin and git's prompts are off (`GIT_TERMINAL_PROMPT=0`), so it can never wait for input.
 
 ### `gitwork add`
@@ -364,6 +372,24 @@ gitwork sync api --tag frontend --tag web
 - With no names or Tags, the Selection is every Project in the Manifest.
 - A name that isn't in the Manifest, or a Tag no Project has, is an error, and nothing is done.
 - The Selection never depends on the current directory: running `gitwork sync` inside `projects/api` still syncs every Project.
+
+### Shell completion
+
+Tab completion works in `zsh` and `bash`. It completes commands, options, Project names and Tags, and after `gitwork exec ... --` it completes the command like any other. Set it up once:
+
+```console
+$ gitwork completion install
+Added gitwork completion to ~/.zshrc
+Open a new shell to use it, or run: exec zsh
+```
+
+- It sets up the shell in `$SHELL`; name another as in `gitwork completion install bash`. It writes to `~/.zshrc` (or `$ZDOTDIR/.zshrc`) for zsh, and `~/.bashrc` for bash, or `~/.bash_profile` on macOS.
+- It adds one block between `# >>> gitwork completion >>>` and `# <<< gitwork completion <<<` and touches nothing else. Running it again changes nothing.
+- The block asks `gitwork` for the completion script on the first Tab, not when the shell starts, so new shells start no slower and completion keeps up with gitwork upgrades.
+- `gitwork completion uninstall` takes the block out again.
+- To load it yourself instead, `gitwork completion zsh` or `gitwork completion bash` prints the script, for `eval "$(gitwork completion zsh)"` after `compinit`.
+
+`gitwork init` reminds you to set it up until you have.
 
 ### Global options
 

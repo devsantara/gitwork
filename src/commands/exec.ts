@@ -1,10 +1,10 @@
-import { spawn } from 'node:child_process';
+import { spawn, type StdioOptions } from 'node:child_process';
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Writable } from 'node:stream';
 
 import { limitConcurrency } from '#/concurrency.js';
-import { errorMessage } from '#/errors.js';
+import { errorCode, errorMessage } from '#/errors.js';
 import { isRepositoryRoot } from '#/git.js';
 import type { Project } from '#/manifest.js';
 import { outcomeLine, outcomeSummary } from '#/outcomes.js';
@@ -30,7 +30,7 @@ type ProjectResult = { name: string } & (
 type Output = 'inherit' | { prefix: string };
 
 /**
- * Runs `command` through the shell in every cloned Project of the Selection,
+ * Runs `command` in every cloned Project of the Selection (see `runCommand`),
  * one at a time with a heading above each Project's output, or with
  * `parallel` up to 8 at once with the Project's name in front of every line.
  * Keeps going after a failure, then prints one line per Project and a summary.
@@ -38,7 +38,7 @@ type Output = 'inherit' | { prefix: string };
 export async function exec(
   workspace: Workspace,
   selection: readonly Project[],
-  command: string,
+  command: readonly string[],
   options: { parallel: boolean },
 ): Promise<number> {
   checkProjectsFolder(workspace.dir);
@@ -109,7 +109,7 @@ export async function exec(
 async function execProject(
   name: string,
   folder: string,
-  command: string,
+  command: readonly string[],
   output: Output,
   starting: () => Promise<void>,
 ): Promise<ProjectResult> {
@@ -120,7 +120,7 @@ async function execProject(
     if (!stats.isDirectory() || !(await isRepositoryRoot(folder)))
       return { name, outcome: 'failed', error: 'not a git repository' };
     await starting();
-    const error = await runShell(command, folder, output);
+    const error = await runCommand(command, folder, output);
     return error === undefined
       ? { name, outcome: 'ok' }
       : { name, outcome: 'failed', error };
@@ -130,28 +130,45 @@ async function execProject(
 }
 
 /**
- * Runs `command` with `sh -c` in `cwd`, with no stdin, so it can never wait for
- * input. Returns why it failed, or undefined when it exited 0.
+ * Runs `command` in `cwd`, with no stdin, so it can never wait for input. A
+ * single word is a shell command, run with `sh -c`; several words are a
+ * program and its arguments, run as they are, so quotes the user's shell
+ * already removed are never parsed again. Returns why it failed, or undefined
+ * when it exited 0.
  */
-function runShell(
-  command: string,
+function runCommand(
+  command: readonly string[],
   cwd: string,
   output: Output,
 ): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
     const piped = output !== 'inherit';
-    const child = spawn(command, {
+    const stream = piped ? 'pipe' : 'inherit';
+    const options = {
       cwd,
-      shell: true,
-      // PWD too, so the shell starts from the path gitwork gave, not a symlink-free one.
+      // PWD too, so the command starts from the path gitwork gave, not a symlink-free one.
       env: { ...process.env, PWD: cwd, GIT_TERMINAL_PROMPT: '0' },
-      stdio: ['ignore', piped ? 'pipe' : 'inherit', piped ? 'pipe' : 'inherit'],
-    });
+      stdio: ['ignore', stream, stream] satisfies StdioOptions,
+    };
+    const [file = '', ...args] = command;
+    const child =
+      args.length === 0
+        ? spawn(file, { ...options, shell: true })
+        : spawn(file, args, options);
+    // Both are set when piped; checked so a missing one can't go unnoticed.
     if (piped) {
-      prefixLines(child.stdout!, process.stdout, output.prefix);
-      prefixLines(child.stderr!, process.stderr, output.prefix);
+      if (child.stdout === null || child.stderr === null) {
+        throw new Error('a piped command has no stdout or stderr');
+      }
+      prefixLines(child.stdout, process.stdout, output.prefix);
+      prefixLines(child.stderr, process.stderr, output.prefix);
     }
-    child.on('error', reject);
+    child.on('error', (error) => {
+      if (errorCode(error) === 'ENOENT') resolve(`command not found: ${file}`);
+      else if (errorCode(error) === 'EACCES')
+        resolve(`permission denied: ${file}`);
+      else reject(error);
+    });
     child.on('close', (code, signal) => {
       if (code === 0) resolve(undefined);
       else if (signal !== null) resolve(`killed by ${signal}`);

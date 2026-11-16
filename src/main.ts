@@ -4,6 +4,12 @@ import { parseArgs } from 'node:util';
 
 import { add } from '#/commands/add.js';
 import { check } from '#/commands/check.js';
+import {
+  complete,
+  completion,
+  installCompletion,
+  uninstallCompletion,
+} from '#/commands/completion.js';
 import { exec } from '#/commands/exec.js';
 import { init } from '#/commands/init.js';
 import { prune } from '#/commands/prune.js';
@@ -23,14 +29,21 @@ Commands:
   check          Validate gitwork.yaml and report every error
   sync [sel]     Clone Missing Projects and fast-forward cloned ones
   status [sel]   Show the branch and states of each Project
-  exec [sel] -- <command>
-                 Run <command> through the shell in each cloned Project
+  exec [sel] -- <command> [<arg>...]
+                 Run a command in each cloned Project: one word runs
+                 through the shell, several run as they are
   add <url> [<name>]
                  Clone a Project, then list it in gitwork.yaml
   add <name>     List an Unlisted Project, with its origin as the url
   remove <name>  Take a Project out of gitwork.yaml, leaving its folder
   prune [<name>...]
                  Delete Unlisted Projects that hold nothing that could be lost
+  completion install [<shell>]
+                 Set up tab completion for zsh or bash (default: $SHELL)
+  completion uninstall [<shell>]
+                 Take tab completion out again
+  completion <shell>
+                 Print the completion script, to load it yourself
 
 Selection [sel]:
   <name>...      Pick these Projects
@@ -119,12 +132,28 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
   if (command !== 'exec' && commandArgs !== undefined) {
     throw new UserError(`'${command}' takes nothing after '--'`);
   }
-  // Joined like ssh joins its arguments: the shell parses the result.
-  const shellCommand = commandArgs?.join(' ') ?? '';
-  if (command === 'exec' && shellCommand.trim() === '') {
+  const execCommand = commandArgs ?? [];
+  if (command === 'exec' && execCommand.every((word) => word.trim() === '')) {
     throw new UserError(
       "'exec' needs a command after '--', as in 'gitwork exec -- npm test'",
     );
+  }
+  if (command === 'completion') {
+    const [action, ...shells] = rest;
+    const install = action === 'install' || action === 'uninstall';
+    if ((install ? shells.length : rest.length) > 1) {
+      throw new UserError(
+        `'completion' takes one shell, got '${(install ? shells : rest).join(' ')}'`,
+      );
+    }
+    if (action === 'install') return installCompletion(shells[0]);
+    if (action === 'uninstall') return uninstallCompletion(shells[0]);
+    return completion(action);
+  }
+  if (command === '__complete') {
+    // Completing must never fail loudly, not even on a bad -C.
+    const dir = values.directory === undefined ? '.' : values.directory;
+    return complete(resolve(dir), rest[0]);
   }
   if (values.directory !== undefined) changeDirectory(values.directory);
 
@@ -198,14 +227,15 @@ async function run(args: string[], unlisted: string[]): Promise<number> {
         notRepositories: scan.notRepositories,
       });
     case 'exec':
-      return exec(workspace, selection, shellCommand, {
+      return exec(workspace, selection, execCommand, {
         parallel: values.parallel ?? false,
       });
   }
   throw new Error(`command '${command}' is listed but not implemented`);
 }
 
-const COMMANDS = new Set([
+/** Every command; the completion scripts must offer each one but `__complete`. */
+export const COMMANDS = new Set([
   'init',
   'check',
   'sync',
@@ -214,6 +244,9 @@ const COMMANDS = new Set([
   'add',
   'remove',
   'prune',
+  'completion',
+  // Lists Project names and Tags for the completion scripts; not in the usage.
+  '__complete',
 ]);
 const JSON_COMMANDS = new Set(['check', 'sync', 'status']);
 const SELECTION_COMMANDS = new Set(['sync', 'status', 'exec']);

@@ -32,12 +32,25 @@ describe('gitwork exec', () => {
     expect(result.stderr).toBe('');
   });
 
-  test('joins the words after -- into one shell command', () => {
+  test('runs several words after -- as they are, with no shell', () => {
     const { dir } = clonedApi();
 
-    const result = execIn(dir, '--', 'echo', 'a  b', '|', 'tr', 'a', 'x');
+    const result = execIn(dir, '--', 'echo', 'a  b', '|', "it's", '$HOME');
 
-    expect(result.stdout).toBe('==> api <==\nx b\n\napi  ok\n\n1 ok\n');
+    expect(result.stdout).toBe(
+      "==> api <==\na  b | it's $HOME\n\napi  ok\n\n1 ok\n",
+    );
+  });
+
+  test('a program that is not found fails, naming it', () => {
+    const { dir } = clonedApi();
+
+    const result = execIn(dir, '--', 'no-such-program', 'x');
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      'api  failed: command not found: no-such-program',
+    );
   });
 
   test('runs one Project at a time, in Manifest order; Missing ones are skipped', () => {
