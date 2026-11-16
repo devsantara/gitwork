@@ -30,6 +30,14 @@ _Avoid_: filter, scope, subset
 
 ### Project states
 
+**Listed**:
+A Project the Manifest names. To list a Project is to put it in the Manifest.
+_Avoid_: tracked, registered, configured
+
+**Cloned**:
+A Listed Project whose folder is present in `projects/`.
+_Avoid_: checked out, present, local
+
 **Missing**:
 A Project listed in the Manifest with no folder in `projects/` yet. This is normal when someone works with only some of the Projects; it is not an error.
 _Avoid_: not cloned, absent
@@ -55,3 +63,9 @@ _Avoid_: error (as a state)
 **Prune**:
 To delete Unlisted Projects whose folders hold nothing that could be lost.
 _Avoid_: clean, purge
+
+### Agents
+
+**Agent Guide**:
+What gitwork tells an AI agent about working in a Workspace: the rules for using gitwork safely, and the Workspace's own Projects. It always matches the installed gitwork.
+_Avoid_: prompt, instructions, agent docs
